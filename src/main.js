@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BLOCK_TYPES, PLAYER_EYE_HEIGHT } from './world.js';
+import { BLOCK_TYPES, CAMERA_VIEW_OFFSET, PLAYER_EYE_HEIGHT } from './world.js';
 import { beginGame } from './start-control.js';
 import { getMovementInput, isWorldRegenerationKey, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
@@ -39,7 +39,11 @@ function startGame() {
   const blocks = worldSession.blocks;
 
   const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 100);
-  camera.position.set(worldSession.player.x, worldSession.player.y, worldSession.player.z);
+  camera.position.set(
+    worldSession.player.x,
+    worldSession.player.y - CAMERA_VIEW_OFFSET,
+    worldSession.player.z,
+  );
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
@@ -155,6 +159,7 @@ function startGame() {
   let pitch = 0;
   let verticalSpeed = worldSession.player.verticalSpeed;
   let grounded = worldSession.player.grounded;
+  let playerEyeY = worldSession.player.y;
   let gameStarted = false;
   let miningHeld = false;
   let lastTime = performance.now();
@@ -230,7 +235,8 @@ function startGame() {
 
     droppedItems.forEach((item) => scene.remove(item.mesh));
     droppedItems.length = 0;
-    camera.position.set(worldSession.player.x, worldSession.player.y, worldSession.player.z);
+    playerEyeY = worldSession.player.y;
+    camera.position.set(worldSession.player.x, playerEyeY - CAMERA_VIEW_OFFSET, worldSession.player.z);
     verticalSpeed = worldSession.player.verticalSpeed;
     grounded = worldSession.player.grounded;
     keys.clear();
@@ -338,7 +344,7 @@ function startGame() {
       z: camera.position.z,
       nextX: THREE.MathUtils.clamp(nextX, -15.5, 15.5),
       nextZ: THREE.MathUtils.clamp(nextZ, -15.5, 15.5),
-      eyeY: camera.position.y,
+      eyeY: playerEyeY,
       eyeHeight,
     });
     camera.position.x = movement.x;
@@ -348,23 +354,25 @@ function startGame() {
       blocks,
       x: camera.position.x,
       z: camera.position.z,
-      eyeY: camera.position.y,
+      eyeY: playerEyeY,
       verticalSpeed,
       delta,
       eyeHeight,
     });
-    camera.position.y = physics.eyeY;
+    playerEyeY = physics.eyeY;
+    camera.position.y = playerEyeY - CAMERA_VIEW_OFFSET;
     verticalSpeed = physics.verticalSpeed;
     grounded = physics.grounded;
 
     const respawn = respawnIfInVoid({
-      eyeY: camera.position.y,
+      eyeY: playerEyeY,
       verticalSpeed,
       spawn,
     });
     if (respawn.respawned) {
       const safeSpawn = findSafeSpawnPoint(blocks, spawn);
-      camera.position.set(safeSpawn.x, safeSpawn.y, safeSpawn.z);
+      playerEyeY = safeSpawn.y;
+      camera.position.set(safeSpawn.x, playerEyeY - CAMERA_VIEW_OFFSET, safeSpawn.z);
       verticalSpeed = respawn.verticalSpeed;
       grounded = true;
     }
@@ -374,7 +382,7 @@ function startGame() {
     const blocks = blockMeshes.flatMap((mesh) => mesh.userData.blockPositions);
     const player = {
       x: camera.position.x,
-      y: camera.position.y - eyeHeight * 0.55,
+      y: playerEyeY - eyeHeight * 0.55,
       z: camera.position.z,
     };
     for (let index = droppedItems.length - 1; index >= 0; index -= 1) {
@@ -460,7 +468,8 @@ function startGame() {
           blockMesh.instanceMatrix.needsUpdate = true;
           blockMesh.computeBoundingSphere();
         }
-        camera.position.set(spawn.x, spawn.y, spawn.z);
+        playerEyeY = spawn.y;
+        camera.position.set(spawn.x, playerEyeY - CAMERA_VIEW_OFFSET, spawn.z);
         verticalSpeed = 0;
         grounded = true;
       }

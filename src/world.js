@@ -1,5 +1,6 @@
 export const WORLD_LIMIT = 32;
 export const PLAYER_EYE_HEIGHT = 2;
+export const CAMERA_VIEW_OFFSET = 0.15;
 export const BLOCK_TYPES = Object.freeze([
   'grass', 'dirt', 'stone', 'sand', 'brick', 'planks', 'log', 'leaves',
 ]);

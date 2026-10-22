@@ -16,6 +16,20 @@ export function stepVerticalPhysics({
   const nextEyeY = eyeY + nextVerticalSpeed * delta;
   const nextFeetY = nextEyeY - eyeHeight;
 
+  if (nextVerticalSpeed > 0) {
+    const ceilingBottom = blocks.reduce((lowest, block) => {
+      const bottom = block.y - 0.5;
+      const overlapsX = x + radius > block.x - 0.5 && x - radius < block.x + 0.5;
+      const overlapsZ = z + radius > block.z - 0.5 && z - radius < block.z + 0.5;
+      const crossesBottom = bottom >= eyeY - 1e-6 && bottom <= nextEyeY + 1e-6;
+      return overlapsX && overlapsZ && crossesBottom ? Math.min(lowest, bottom) : lowest;
+    }, Infinity);
+
+    if (Number.isFinite(ceilingBottom)) {
+      return { eyeY: ceilingBottom, verticalSpeed: 0, grounded: false };
+    }
+  }
+
   if (nextVerticalSpeed <= 0) {
     const landingTop = blocks.reduce((highest, block) => {
       const top = block.y + 0.5;
