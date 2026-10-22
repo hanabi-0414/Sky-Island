@@ -5,6 +5,7 @@ import { getMovementInput, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
 import {
   resolvePlayerMovement,
+  findSafeSpawnPoint,
   restoreWorldIfEmpty,
   respawnIfInVoid,
   stepVerticalPhysics,
@@ -198,7 +199,8 @@ function startGame() {
       spawn,
     });
     if (respawn.respawned) {
-      camera.position.set(spawn.x, respawn.eyeY, spawn.z);
+      const safeSpawn = findSafeSpawnPoint(blocks, spawn);
+      camera.position.set(safeSpawn.x, safeSpawn.y, safeSpawn.z);
       verticalSpeed = respawn.verticalSpeed;
       grounded = true;
     }
