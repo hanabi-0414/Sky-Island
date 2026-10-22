@@ -5,6 +5,7 @@ import { getMovementInput, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
 import {
   resolvePlayerMovement,
+  createInitialPlayerState,
   findSafeSpawnPoint,
   restoreWorldIfEmpty,
   respawnIfInVoid,
@@ -28,8 +29,11 @@ function startGame() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#bfe0f4');
 
+  const blocks = createIslandBlocks();
+  const initialPlayer = createInitialPlayerState(blocks, findSpawnPoint());
+  const spawn = { x: initialPlayer.x, y: initialPlayer.y, z: initialPlayer.z };
+
   const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 100);
-  const spawn = findSpawnPoint();
   camera.position.set(spawn.x, spawn.y, spawn.z);
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
@@ -69,7 +73,6 @@ function startGame() {
     stone: new THREE.MeshLambertMaterial({ map: stone }),
   };
 
-  const blocks = createIslandBlocks();
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const transform = new THREE.Object3D();
   const blockMeshes = [];
@@ -109,8 +112,8 @@ function startGame() {
   const keys = new Set();
   let yaw = 0;
   let pitch = 0;
-  let verticalSpeed = 0;
-  let grounded = true;
+  let verticalSpeed = initialPlayer.verticalSpeed;
+  let grounded = initialPlayer.grounded;
   let gameStarted = false;
   let miningHeld = false;
   let lastTime = performance.now();

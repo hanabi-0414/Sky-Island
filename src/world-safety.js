@@ -92,6 +92,26 @@ export function findSafeSpawnPoint(blocks, preferred = findSpawnPoint(), radius 
   };
 }
 
+export function createInitialPlayerState(blocks, preferred = findSpawnPoint()) {
+  const spawn = findSafeSpawnPoint(blocks, preferred);
+  const physics = stepVerticalPhysics({
+    blocks,
+    x: spawn.x,
+    z: spawn.z,
+    eyeY: spawn.y,
+    verticalSpeed: 0,
+    delta: 1 / 60,
+  });
+
+  return {
+    x: spawn.x,
+    y: physics.eyeY,
+    z: spawn.z,
+    verticalSpeed: physics.verticalSpeed,
+    grounded: physics.grounded,
+  };
+}
+
 export function respawnIfInVoid({ eyeY, verticalSpeed, spawn, voidY = -12 }) {
   if (eyeY >= voidY) return { eyeY, verticalSpeed, respawned: false };
   return { eyeY: spawn.y, verticalSpeed: 0, respawned: true };
