@@ -3,6 +3,7 @@ import { createIslandBlocks, findSpawnPoint } from './world.js';
 import { beginGame } from './start-control.js';
 import { getMovementInput, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
+import { restoreWorldIfEmpty, respawnIfInVoid, stepVerticalPhysics } from './world-safety.js';
 
 const game = document.querySelector('#game');
 const startButton = document.querySelector('#start');
@@ -76,6 +77,7 @@ function startGame() {
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.userData.blockPositions = positions;
+    mesh.userData.blockPositionsType = type;
     blockMeshes.push(mesh);
     scene.add(mesh);
   }
@@ -109,8 +111,6 @@ function startGame() {
   let fpsFrames = 0;
   let fpsStart = lastTime;
   const eyeHeight = 1.7;
-  const islandTop = 0.5;
-  const groundEyeY = islandTop + eyeHeight;
 
   window.addEventListener('keydown', (event) => {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
@@ -161,14 +161,30 @@ function startGame() {
     const speed = 5.2 * delta / length;
     const nextX = camera.position.x + (sideways * Math.cos(yaw) - forward * Math.sin(yaw)) * speed;
     const nextZ = camera.position.z + (-sideways * Math.sin(yaw) - forward * Math.cos(yaw)) * speed;
-    camera.position.x = THREE.MathUtils.clamp(nextX, -7.25, 6.25);
-    camera.position.z = THREE.MathUtils.clamp(nextZ, -7.25, 6.25);
+    camera.position.x = THREE.MathUtils.clamp(nextX, -15.5, 15.5);
+    camera.position.z = THREE.MathUtils.clamp(nextZ, -15.5, 15.5);
 
-    verticalSpeed -= 19 * delta;
-    camera.position.y += verticalSpeed * delta;
-    if (camera.position.y <= groundEyeY) {
-      camera.position.y = groundEyeY;
-      verticalSpeed = 0;
+    const physics = stepVerticalPhysics({
+      blocks: blockMeshes.flatMap((mesh) => mesh.userData.blockPositions),
+      x: camera.position.x,
+      z: camera.position.z,
+      eyeY: camera.position.y,
+      verticalSpeed,
+      delta,
+      eyeHeight,
+    });
+    camera.position.y = physics.eyeY;
+    verticalSpeed = physics.verticalSpeed;
+    grounded = physics.grounded;
+
+    const respawn = respawnIfInVoid({
+      eyeY: camera.position.y,
+      verticalSpeed,
+      spawn,
+    });
+    if (respawn.respawned) {
+      camera.position.set(spawn.x, respawn.eyeY, spawn.z);
+      verticalSpeed = respawn.verticalSpeed;
       grounded = true;
     }
   }
@@ -214,6 +230,24 @@ function startGame() {
       mesh.computeBoundingSphere();
       crackOverlay.visible = false;
       mining.update({ target: null, held: false, delta: 0, type: block.type });
+      if (blockMeshes.every((blockMesh) => blockMesh.userData.blockPositions.length === 0)) {
+        const restored = restoreWorldIfEmpty([]);
+        for (const blockMesh of blockMeshes) {
+          const positions = restored.filter((restoredBlock) => restoredBlock.type === blockMesh.userData.blockPositionsType);
+          blockMesh.userData.blockPositions.splice(0, blockMesh.userData.blockPositions.length, ...positions);
+          positions.forEach((restoredBlock, index) => {
+            transform.position.set(restoredBlock.x, restoredBlock.y, restoredBlock.z);
+            transform.updateMatrix();
+            blockMesh.setMatrixAt(index, transform.matrix);
+          });
+          blockMesh.count = positions.length;
+          blockMesh.instanceMatrix.needsUpdate = true;
+          blockMesh.computeBoundingSphere();
+        }
+        camera.position.set(spawn.x, spawn.y, spawn.z);
+        verticalSpeed = 0;
+        grounded = true;
+      }
     }
   }
 

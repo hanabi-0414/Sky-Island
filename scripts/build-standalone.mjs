@@ -8,6 +8,9 @@ const read = (relativePath) => readFile(path.join(projectRoot, relativePath), 'u
 const html = await read('index.template.html');
 const styles = await read('styles.css');
 const world = (await read('src/world.js')).replace(/^export\s+/gm, '');
+const worldSafety = (await read('src/world-safety.js'))
+  .replace(/^import\s+.*;\r?\n/gm, '')
+  .replace(/^export\s+/gm, '');
 const startControl = (await read('src/start-control.js')).replace(/^export\s+/gm, '');
 const playerInput = (await read('src/player-input.js')).replace(/^export\s+/gm, '');
 let main = (await read('src/main.js')).replace(/^import\s+.*;\r?\n/gm, '');
@@ -31,7 +34,7 @@ if (main.includes('./assets/') || main.includes('import ')) {
 }
 
 const miningControl = (await read('src/mining-control.js')).replace(/^export\s+/gm, '');
-const standaloneScript = `const INLINE_TEXTURES = ${JSON.stringify(inlineTextures)};\n${world}\n${startControl}\n${playerInput}\n${miningControl}\n${main}`;
+const standaloneScript = `const INLINE_TEXTURES = ${JSON.stringify(inlineTextures)};\n${world}\n${worldSafety}\n${startControl}\n${playerInput}\n${miningControl}\n${main}`;
 const withoutModuleMap = html.replace(/\s*<script type="importmap">[\s\S]*?<\/script>/, '');
 const withInlineStyles = withoutModuleMap.replace(
   '<link rel="stylesheet" href="./styles.css" />',

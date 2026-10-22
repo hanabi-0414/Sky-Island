@@ -123,6 +123,48 @@ function findSpawnPoint() {
   return { x: 0, y: 2.2, z: 0 };
 }
 
+
+function stepVerticalPhysics({
+  blocks,
+  x,
+  z,
+  eyeY,
+  verticalSpeed,
+  delta,
+  eyeHeight = 1.7,
+  gravity = 19,
+}) {
+  const currentFeetY = eyeY - eyeHeight;
+  const nextVerticalSpeed = verticalSpeed - gravity * delta;
+  const nextEyeY = eyeY + nextVerticalSpeed * delta;
+  const nextFeetY = nextEyeY - eyeHeight;
+
+  if (nextVerticalSpeed <= 0) {
+    const landingTop = blocks.reduce((highest, block) => {
+      const top = block.y + 0.5;
+      const overlapsX = x >= block.x - 0.5 && x <= block.x + 0.5;
+      const overlapsZ = z >= block.z - 0.5 && z <= block.z + 0.5;
+      const crossesTop = top <= currentFeetY + 1e-6 && top >= nextFeetY - 1e-6;
+      return overlapsX && overlapsZ && crossesTop ? Math.max(highest, top) : highest;
+    }, -Infinity);
+
+    if (Number.isFinite(landingTop)) {
+      return { eyeY: landingTop + eyeHeight, verticalSpeed: 0, grounded: true };
+    }
+  }
+
+  return { eyeY: nextEyeY, verticalSpeed: nextVerticalSpeed, grounded: false };
+}
+
+function respawnIfInVoid({ eyeY, verticalSpeed, spawn, voidY = -12 }) {
+  if (eyeY >= voidY) return { eyeY, verticalSpeed, respawned: false };
+  return { eyeY: spawn.y, verticalSpeed: 0, respawned: true };
+}
+
+function restoreWorldIfEmpty(blocks) {
+  return blocks.length === 0 ? createIslandBlocks() : blocks;
+}
+
 function beginGame(onStart, requestPointerLock) {
   onStart();
 
@@ -256,6 +298,7 @@ function startGame() {
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.userData.blockPositions = positions;
+    mesh.userData.blockPositionsType = type;
     blockMeshes.push(mesh);
     scene.add(mesh);
   }
@@ -289,8 +332,6 @@ function startGame() {
   let fpsFrames = 0;
   let fpsStart = lastTime;
   const eyeHeight = 1.7;
-  const islandTop = 0.5;
-  const groundEyeY = islandTop + eyeHeight;
 
   window.addEventListener('keydown', (event) => {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
@@ -341,14 +382,30 @@ function startGame() {
     const speed = 5.2 * delta / length;
     const nextX = camera.position.x + (sideways * Math.cos(yaw) - forward * Math.sin(yaw)) * speed;
     const nextZ = camera.position.z + (-sideways * Math.sin(yaw) - forward * Math.cos(yaw)) * speed;
-    camera.position.x = THREE.MathUtils.clamp(nextX, -7.25, 6.25);
-    camera.position.z = THREE.MathUtils.clamp(nextZ, -7.25, 6.25);
+    camera.position.x = THREE.MathUtils.clamp(nextX, -15.5, 15.5);
+    camera.position.z = THREE.MathUtils.clamp(nextZ, -15.5, 15.5);
 
-    verticalSpeed -= 19 * delta;
-    camera.position.y += verticalSpeed * delta;
-    if (camera.position.y <= groundEyeY) {
-      camera.position.y = groundEyeY;
-      verticalSpeed = 0;
+    const physics = stepVerticalPhysics({
+      blocks: blockMeshes.flatMap((mesh) => mesh.userData.blockPositions),
+      x: camera.position.x,
+      z: camera.position.z,
+      eyeY: camera.position.y,
+      verticalSpeed,
+      delta,
+      eyeHeight,
+    });
+    camera.position.y = physics.eyeY;
+    verticalSpeed = physics.verticalSpeed;
+    grounded = physics.grounded;
+
+    const respawn = respawnIfInVoid({
+      eyeY: camera.position.y,
+      verticalSpeed,
+      spawn,
+    });
+    if (respawn.respawned) {
+      camera.position.set(spawn.x, respawn.eyeY, spawn.z);
+      verticalSpeed = respawn.verticalSpeed;
       grounded = true;
     }
   }
@@ -394,6 +451,24 @@ function startGame() {
       mesh.computeBoundingSphere();
       crackOverlay.visible = false;
       mining.update({ target: null, held: false, delta: 0, type: block.type });
+      if (blockMeshes.every((blockMesh) => blockMesh.userData.blockPositions.length === 0)) {
+        const restored = restoreWorldIfEmpty([]);
+        for (const blockMesh of blockMeshes) {
+          const positions = restored.filter((restoredBlock) => restoredBlock.type === blockMesh.userData.blockPositionsType);
+          blockMesh.userData.blockPositions.splice(0, blockMesh.userData.blockPositions.length, ...positions);
+          positions.forEach((restoredBlock, index) => {
+            transform.position.set(restoredBlock.x, restoredBlock.y, restoredBlock.z);
+            transform.updateMatrix();
+            blockMesh.setMatrixAt(index, transform.matrix);
+          });
+          blockMesh.count = positions.length;
+          blockMesh.instanceMatrix.needsUpdate = true;
+          blockMesh.computeBoundingSphere();
+        }
+        camera.position.set(spawn.x, spawn.y, spawn.z);
+        verticalSpeed = 0;
+        grounded = true;
+      }
     }
   }
 
