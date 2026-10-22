@@ -1,4 +1,4 @@
-import { createIslandBlocks } from './world.js';
+import { createIslandBlocks, PLAYER_EYE_HEIGHT } from './world.js';
 
 export function stepVerticalPhysics({
   blocks,
@@ -7,7 +7,7 @@ export function stepVerticalPhysics({
   eyeY,
   verticalSpeed,
   delta,
-  eyeHeight = 1.7,
+  eyeHeight = PLAYER_EYE_HEIGHT,
   gravity = 19,
 }) {
   const currentFeetY = eyeY - eyeHeight;

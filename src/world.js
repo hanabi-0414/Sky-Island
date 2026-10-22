@@ -1,4 +1,5 @@
 export const WORLD_LIMIT = 32;
+export const PLAYER_EYE_HEIGHT = 2;
 
 export function isWithinWorldBounds(x, y, z) {
   const half = WORLD_LIMIT / 2;
@@ -27,5 +28,5 @@ export function createIslandBlocks() {
 }
 
 export function findSpawnPoint() {
-  return { x: 0, y: 2.2, z: 0 };
+  return { x: 0, y: 0.5 + PLAYER_EYE_HEIGHT, z: 0 };
 }

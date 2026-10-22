@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createIslandBlocks, findSpawnPoint } from './world.js';
+import { createIslandBlocks, findSpawnPoint, PLAYER_EYE_HEIGHT } from './world.js';
 import { beginGame } from './start-control.js';
 import { getMovementInput, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
@@ -110,7 +110,7 @@ function startGame() {
   let lastTime = performance.now();
   let fpsFrames = 0;
   let fpsStart = lastTime;
-  const eyeHeight = 1.7;
+  const eyeHeight = PLAYER_EYE_HEIGHT;
 
   window.addEventListener('keydown', (event) => {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
