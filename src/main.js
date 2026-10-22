@@ -3,6 +3,7 @@ import { createIslandBlocks, findSpawnPoint, PLAYER_EYE_HEIGHT } from './world.j
 import { beginGame } from './start-control.js';
 import { getMovementInput, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
+import { createDroppedItem, DROP_ITEM_SIZE, stepDroppedItem } from './drop-item.js';
 import {
   resolvePlayerMovement,
   createInitialPlayerState,
@@ -90,6 +91,9 @@ function startGame() {
     blockMeshes.push(mesh);
     scene.add(mesh);
   }
+
+  const dropGeometry = new THREE.BoxGeometry(DROP_ITEM_SIZE, DROP_ITEM_SIZE, DROP_ITEM_SIZE);
+  const droppedItems = [];
 
   const crackMaterials = Array.from({ length: 10 }, (_, stage) => {
     const map = texture(`destroy_stage_${stage}`);
@@ -209,6 +213,15 @@ function startGame() {
     }
   }
 
+  function updateDroppedItems(delta) {
+    const blocks = blockMeshes.flatMap((mesh) => mesh.userData.blockPositions);
+    for (const item of droppedItems) {
+      item.state = stepDroppedItem(item.state, blocks, delta);
+      item.mesh.position.set(item.state.x, item.state.y, item.state.z);
+      item.mesh.rotation.set(item.state.rotation * 0.7, item.state.rotation, 0);
+    }
+  }
+
   function updateMining(delta) {
     raycaster.setFromCamera(screenCenter, camera);
     const hit = miningHeld && gameStarted
@@ -250,6 +263,11 @@ function startGame() {
       mesh.computeBoundingSphere();
       crackOverlay.visible = false;
       mining.update({ target: null, held: false, delta: 0, type: block.type });
+      const droppedState = createDroppedItem(block);
+      const droppedMesh = new THREE.Mesh(dropGeometry, materials[block.type]);
+      droppedMesh.position.set(droppedState.x, droppedState.y, droppedState.z);
+      scene.add(droppedMesh);
+      droppedItems.push({ state: droppedState, mesh: droppedMesh });
       if (blockMeshes.every((blockMesh) => blockMesh.userData.blockPositions.length === 0)) {
         const restored = restoreWorldIfEmpty([]);
         for (const blockMesh of blockMeshes) {
@@ -276,6 +294,7 @@ function startGame() {
     const delta = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
     updatePlayer(delta);
+    updateDroppedItems(delta);
     updateMining(delta);
     renderer.render(scene, camera);
     fpsFrames += 1;
