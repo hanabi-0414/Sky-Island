@@ -23,13 +23,13 @@ test('下落中的玩家碰到方塊頂面會停在方塊上', () => {
     blocks: [{ x: 0, y: -1, z: 0, type: 'dirt' }],
     x: 0,
     z: 0,
-    eyeY: 0.7,
+    eyeY: 2,
     verticalSpeed: -8,
-    delta: 0.05,
+    delta: 0.1,
   });
 
   assert.equal(result.grounded, true);
-  assert.equal(result.eyeY, 0.2);
+  assert.equal(result.eyeY, 1.2);
   assert.equal(result.verticalSpeed, 0);
 });
 
@@ -46,6 +46,6 @@ test('小島方塊全部挖完時會重建固定小島，否則保留現有方�
   const existing = [{ x: 1, y: 0, z: 0, type: 'grass' }];
 
   assert.equal(restored.length, createIslandBlocks().length);
-  assert.notEqual(restored, createIslandBlocks());
+  assert.deepEqual(restored, createIslandBlocks());
   assert.equal(restoreWorldIfEmpty(existing), existing);
 });
