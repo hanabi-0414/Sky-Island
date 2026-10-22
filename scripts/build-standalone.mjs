@@ -12,7 +12,10 @@ const startControl = (await read('src/start-control.js')).replace(/^export\s+/gm
 const playerInput = (await read('src/player-input.js')).replace(/^export\s+/gm, '');
 let main = (await read('src/main.js')).replace(/^import\s+.*;\r?\n/gm, '');
 
-const textureNames = ['grass_top', 'grass_side', 'dirt', 'stone'];
+const textureNames = [
+  'grass_top', 'grass_side', 'dirt', 'stone',
+  ...Array.from({ length: 10 }, (_, stage) => `destroy_stage_${stage}`),
+];
 const inlineTextures = {};
 for (const name of textureNames) {
   const bytes = await readFile(path.join(projectRoot, `assets/sky-island-assets/textures/16px/${name}.png`));
@@ -27,7 +30,8 @@ if (main.includes('./assets/') || main.includes('import ')) {
   throw new Error('遊戲程式仍有無法直接開檔使用的外部相依。');
 }
 
-const standaloneScript = `const INLINE_TEXTURES = ${JSON.stringify(inlineTextures)};\n${world}\n${startControl}\n${playerInput}\n${main}`;
+const miningControl = (await read('src/mining-control.js')).replace(/^export\s+/gm, '');
+const standaloneScript = `const INLINE_TEXTURES = ${JSON.stringify(inlineTextures)};\n${world}\n${startControl}\n${playerInput}\n${miningControl}\n${main}`;
 const withoutModuleMap = html.replace(/\s*<script type="importmap">[\s\S]*?<\/script>/, '');
 const withInlineStyles = withoutModuleMap.replace(
   '<link rel="stylesheet" href="./styles.css" />',

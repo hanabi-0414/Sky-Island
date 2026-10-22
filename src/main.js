@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { createIslandBlocks, findSpawnPoint } from './world.js';
 import { beginGame } from './start-control.js';
 import { getMovementInput, shouldStartJump } from './player-input.js';
+import { createMiningController } from './mining-control.js';
 
 const game = document.querySelector('#game');
 const startButton = document.querySelector('#start');
@@ -64,6 +65,7 @@ function startGame() {
   const blocks = createIslandBlocks();
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const transform = new THREE.Object3D();
+  const blockMeshes = [];
   for (const type of ['grass', 'dirt', 'stone']) {
     const positions = blocks.filter((block) => block.type === type);
     const mesh = new THREE.InstancedMesh(geometry, materials[type], positions.length);
@@ -73,8 +75,28 @@ function startGame() {
       mesh.setMatrixAt(index, transform.matrix);
     });
     mesh.instanceMatrix.needsUpdate = true;
+    mesh.userData.blockPositions = positions;
+    blockMeshes.push(mesh);
     scene.add(mesh);
   }
+
+  const crackMaterials = Array.from({ length: 10 }, (_, stage) => {
+    const map = texture(`destroy_stage_${stage}`);
+    return new THREE.MeshBasicMaterial({
+      map,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    });
+  });
+  const crackOverlay = new THREE.Mesh(new THREE.BoxGeometry(1.006, 1.006, 1.006), crackMaterials);
+  crackOverlay.visible = false;
+  scene.add(crackOverlay);
+  const raycaster = new THREE.Raycaster();
+  const screenCenter = new THREE.Vector2(0, 0);
+  const mining = createMiningController();
 
   const keys = new Set();
   let yaw = 0;
@@ -82,6 +104,7 @@ function startGame() {
   let verticalSpeed = 0;
   let grounded = true;
   let gameStarted = false;
+  let miningHeld = false;
   let lastTime = performance.now();
   let fpsFrames = 0;
   let fpsStart = lastTime;
@@ -94,7 +117,16 @@ function startGame() {
     keys.add(event.code);
   });
   window.addEventListener('keyup', (event) => keys.delete(event.code));
-  window.addEventListener('blur', () => keys.clear());
+  window.addEventListener('blur', () => {
+    keys.clear();
+    miningHeld = false;
+  });
+  renderer.domElement.addEventListener('mousedown', (event) => {
+    if (event.button === 0) miningHeld = true;
+  });
+  window.addEventListener('mouseup', (event) => {
+    if (event.button === 0) miningHeld = false;
+  });
 
   const enterGame = () => beginGame(
     () => {
@@ -141,11 +173,56 @@ function startGame() {
     }
   }
 
+  function updateMining(delta) {
+    raycaster.setFromCamera(screenCenter, camera);
+    const hit = miningHeld && gameStarted
+      ? raycaster.intersectObjects(blockMeshes, false)[0]
+      : null;
+    const mesh = hit?.object ?? null;
+    const instanceId = hit?.instanceId;
+    const block = mesh && Number.isInteger(instanceId)
+      ? mesh.userData.blockPositions[instanceId]
+      : null;
+    const result = mining.update({
+      target: block ? `${block.x},${block.y},${block.z}` : null,
+      held: miningHeld && gameStarted,
+      delta,
+      type: block?.type,
+    });
+
+    if (!block || result.stage == null) {
+      crackOverlay.visible = false;
+      return;
+    }
+
+    crackOverlay.position.set(block.x, block.y, block.z);
+    crackOverlay.material = crackMaterials[result.stage];
+    crackOverlay.visible = true;
+    if (result.mined) {
+      const positions = mesh.userData.blockPositions;
+      const lastIndex = positions.length - 1;
+      if (instanceId !== lastIndex) {
+        const lastBlock = positions[lastIndex];
+        transform.position.set(lastBlock.x, lastBlock.y, lastBlock.z);
+        transform.updateMatrix();
+        mesh.setMatrixAt(instanceId, transform.matrix);
+        positions[instanceId] = lastBlock;
+      }
+      positions.pop();
+      mesh.count = positions.length;
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+      crackOverlay.visible = false;
+      mining.update({ target: null, held: false, delta: 0, type: block.type });
+    }
+  }
+
   function animate(now) {
     requestAnimationFrame(animate);
     const delta = Math.min((now - lastTime) / 1000, 0.05);
     lastTime = now;
     updatePlayer(delta);
+    updateMining(delta);
     renderer.render(scene, camera);
     fpsFrames += 1;
     if (now - fpsStart >= 1000) {
