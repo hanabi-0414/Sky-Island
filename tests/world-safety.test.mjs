@@ -9,13 +9,13 @@ import { createIslandBlocks, findSpawnPoint } from '../src/world.js';
 
 test('玩家只有在腳下有方塊時才能站立，離開支撐後會下墜', () => {
   const blocks = [{ x: 0, y: 0, z: 0, type: 'grass' }];
-  const supported = stepVerticalPhysics({ blocks, x: 0, z: 0, eyeY: 2.2, verticalSpeed: 0, delta: 1 / 60 });
-  const unsupported = stepVerticalPhysics({ blocks, x: 2, z: 0, eyeY: 2.2, verticalSpeed: 0, delta: 1 / 60 });
+  const supported = stepVerticalPhysics({ blocks, x: 0, z: 0, eyeY: 2.5, verticalSpeed: 0, delta: 1 / 60, eyeHeight: 2 });
+  const unsupported = stepVerticalPhysics({ blocks, x: 2, z: 0, eyeY: 2.5, verticalSpeed: 0, delta: 1 / 60, eyeHeight: 2 });
 
   assert.equal(supported.grounded, true);
-  assert.equal(supported.eyeY, 2.2);
+  assert.equal(supported.eyeY, 2.5);
   assert.equal(unsupported.grounded, false);
-  assert.ok(unsupported.eyeY < 2.2);
+  assert.ok(unsupported.eyeY < 2.5);
 });
 
 test('下落中的玩家碰到方塊頂面會停在方塊上', () => {
@@ -26,10 +26,11 @@ test('下落中的玩家碰到方塊頂面會停在方塊上', () => {
     eyeY: 2,
     verticalSpeed: -8,
     delta: 0.1,
+    eyeHeight: 2,
   });
 
   assert.equal(result.grounded, true);
-  assert.equal(result.eyeY, 1.2);
+  assert.equal(result.eyeY, 1.5);
   assert.equal(result.verticalSpeed, 0);
 });
 
