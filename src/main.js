@@ -6,6 +6,7 @@ import { createMiningController } from './mining-control.js';
 import { createDroppedItem, DROP_ITEM_SIZE, stepDroppedItem } from './drop-item.js';
 import { addInventoryItem, stepPickupItem } from './pickup-control.js';
 import { getInventoryIndexFromKey, stepInventorySelection } from './inventory-selection.js';
+import { tryPlaceBlock } from './placement-control.js';
 import { createWorldSession } from './world-session.js';
 import {
   resolvePlayerMovement,
@@ -193,7 +194,12 @@ function startGame() {
   });
   renderer.domElement.addEventListener('mousedown', (event) => {
     if (event.button === 0) miningHeld = true;
+    if (event.button === 2) {
+      event.preventDefault();
+      if (gameStarted) placeTargetedBlock();
+    }
   });
+  renderer.domElement.addEventListener('contextmenu', (event) => event.preventDefault());
   window.addEventListener('mouseup', (event) => {
     if (event.button === 0) miningHeld = false;
   });
@@ -231,6 +237,65 @@ function startGame() {
     miningHeld = false;
     mining.update({ target: null, held: false, delta: 0, type: null });
     crackOverlay.visible = false;
+  }
+
+  function placeTargetedBlock() {
+    raycaster.setFromCamera(screenCenter, camera);
+    const hit = raycaster.intersectObjects(blockMeshes, false)[0];
+    if (!hit || !Number.isInteger(hit.instanceId) || !hit.face) return;
+    const source = hit.object.userData.blockPositions[hit.instanceId];
+    if (!source) return;
+
+    const type = BLOCK_TYPES[selectedInventoryIndex];
+    const blocks = blockMeshes.flatMap((mesh) => mesh.userData.blockPositions);
+    const result = tryPlaceBlock({
+      blocks,
+      source,
+      normal: hit.face.normal,
+      type,
+      inventory,
+    });
+    if (!result.placed) return;
+
+    worldSession.blocks = result.blocks;
+    inventory = result.inventory;
+    const count = inventoryLabels[type];
+    const icon = inventoryIcons[type];
+    const hasItems = inventory[type] > 0;
+    count.textContent = String(inventory[type]);
+    count.hidden = !hasItems;
+    icon.hidden = !hasItems;
+    addPlacedBlockToMesh(result.blocks[result.blocks.length - 1]);
+  }
+
+  function addPlacedBlockToMesh(block) {
+    const meshIndex = blockMeshes.findIndex((mesh) => mesh.userData.blockPositionsType === block.type);
+    const mesh = blockMeshes[meshIndex];
+    const positions = mesh.userData.blockPositions;
+    positions.push(block);
+
+    if (positions.length > mesh.instanceMatrix.count) {
+      const expanded = new THREE.InstancedMesh(geometry, materials[block.type], positions.length);
+      positions.forEach((position, index) => {
+        transform.position.set(position.x, position.y, position.z);
+        transform.updateMatrix();
+        expanded.setMatrixAt(index, transform.matrix);
+      });
+      expanded.instanceMatrix.needsUpdate = true;
+      expanded.userData.blockPositions = positions;
+      expanded.userData.blockPositionsType = block.type;
+      scene.remove(mesh);
+      blockMeshes[meshIndex] = expanded;
+      scene.add(expanded);
+      return;
+    }
+
+    transform.position.set(block.x, block.y, block.z);
+    transform.updateMatrix();
+    mesh.setMatrixAt(positions.length - 1, transform.matrix);
+    mesh.count = positions.length;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
   }
 
   const enterGame = () => beginGame(
