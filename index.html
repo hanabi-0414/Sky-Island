@@ -134,6 +134,19 @@ function beginGame(onStart, requestPointerLock) {
   }
 }
 
+function shouldStartJump(keys, grounded) {
+  return grounded && keys.has('Space');
+}
+
+function getMovementInput(keys) {
+  return {
+    forward: Number(keys.has('KeyW') || keys.has('ArrowUp')) -
+      Number(keys.has('KeyS') || keys.has('ArrowDown')),
+    sideways: Number(keys.has('KeyD') || keys.has('ArrowRight')) -
+      Number(keys.has('KeyA') || keys.has('ArrowLeft')),
+  };
+}
+
 
 const game = document.querySelector('#game');
 const startButton = document.querySelector('#start');
@@ -224,10 +237,6 @@ function startGame() {
   window.addEventListener('keydown', (event) => {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     keys.add(event.code);
-    if (event.code === 'Space' && grounded) {
-      verticalSpeed = 7.1;
-      grounded = false;
-    }
   });
   window.addEventListener('keyup', (event) => keys.delete(event.code));
   window.addEventListener('blur', () => keys.clear());
@@ -256,8 +265,11 @@ function startGame() {
   });
 
   function updatePlayer(delta) {
-    const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS'));
-    const sideways = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
+    if (shouldStartJump(keys, grounded)) {
+      verticalSpeed = 7.1;
+      grounded = false;
+    }
+    const { forward, sideways } = getMovementInput(keys);
     const length = Math.hypot(forward, sideways) || 1;
     const speed = 5.2 * delta / length;
     const nextX = camera.position.x + (sideways * Math.cos(yaw) - forward * Math.sin(yaw)) * speed;

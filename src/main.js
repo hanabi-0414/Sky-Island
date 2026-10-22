@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createIslandBlocks, findSpawnPoint } from './world.js';
 import { beginGame } from './start-control.js';
+import { getMovementInput, shouldStartJump } from './player-input.js';
 
 const game = document.querySelector('#game');
 const startButton = document.querySelector('#start');
@@ -91,10 +92,6 @@ function startGame() {
   window.addEventListener('keydown', (event) => {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     keys.add(event.code);
-    if (event.code === 'Space' && grounded) {
-      verticalSpeed = 7.1;
-      grounded = false;
-    }
   });
   window.addEventListener('keyup', (event) => keys.delete(event.code));
   window.addEventListener('blur', () => keys.clear());
@@ -123,8 +120,11 @@ function startGame() {
   });
 
   function updatePlayer(delta) {
-    const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS'));
-    const sideways = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
+    if (shouldStartJump(keys, grounded)) {
+      verticalSpeed = 7.1;
+      grounded = false;
+    }
+    const { forward, sideways } = getMovementInput(keys);
     const length = Math.hypot(forward, sideways) || 1;
     const speed = 5.2 * delta / length;
     const nextX = camera.position.x + (sideways * Math.cos(yaw) - forward * Math.sin(yaw)) * speed;
