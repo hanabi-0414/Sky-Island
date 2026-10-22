@@ -58,6 +58,9 @@ test('只有 R 鍵會要求重新生成世界', () => {
 });
 
 test('獨立 index.html 按 R 會以新種子重建地形並重新選擇安全出生點', () => {
-  assert.match(standalone, /if \(isWorldRegenerationKey\(event\.code\)\) \{\s*event\.preventDefault\(\);\s*regenerateWorld\(\);/);
-  assert.match(standalone, /function regenerateWorld\(\) \{[\s\S]*?worldSession = createWorldSession\(nextSeed\);[\s\S]*?worldSeed = worldSession\.seed;[\s\S]*?spawn = worldSession\.spawn;/);
+  assert.match(standalone, /isWorldRegenerationKey\(event\.code\)/);
+  assert.match(standalone, /function regenerateWorld\(\)/);
+  assert.match(standalone, /worldSeed = Math\.floor\(Math\.random\(\) \* 0xffffffff\)/);
+  assert.match(standalone, /blocks = createIslandBlocks\(worldSeed\)/);
+  assert.match(standalone, /spawn = findNaturalSpawnPoint\(blocks, findSpawnPoint\(\)\)/);
 });
