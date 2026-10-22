@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createIslandBlocks, findSpawnPoint, PLAYER_EYE_HEIGHT } from './world.js';
+import { BLOCK_TYPES, createIslandBlocks, findSpawnPoint, PLAYER_EYE_HEIGHT } from './world.js';
 import { beginGame } from './start-control.js';
 import { getMovementInput, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
@@ -31,7 +31,8 @@ function startGame() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#bfe0f4');
 
-  const blocks = createIslandBlocks();
+  const worldSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
+  const blocks = createIslandBlocks(worldSeed);
   const spawn = findSafeSpawnPoint(blocks, findSpawnPoint());
   const initialPlayer = createInitialPlayerState(blocks, spawn, 0.1);
 
@@ -61,6 +62,12 @@ function startGame() {
   const grassSide = texture('grass_side');
   const dirt = texture('dirt');
   const stone = texture('stone');
+  const sand = texture('sand');
+  const brick = texture('brick');
+  const planks = texture('planks');
+  const logTop = texture('log_top');
+  const logSide = texture('log_side');
+  const leaves = texture('leaves');
   const grassMaterials = [
     new THREE.MeshLambertMaterial({ map: grassSide }),
     new THREE.MeshLambertMaterial({ map: grassSide }),
@@ -73,12 +80,19 @@ function startGame() {
     grass: grassMaterials,
     dirt: new THREE.MeshLambertMaterial({ map: dirt }),
     stone: new THREE.MeshLambertMaterial({ map: stone }),
+    sand: new THREE.MeshLambertMaterial({ map: sand }),
+    brick: new THREE.MeshLambertMaterial({ map: brick }),
+    planks: new THREE.MeshLambertMaterial({ map: planks }),
+    log: [logSide, logSide, logTop, logTop, logSide, logSide].map((map) =>
+      new THREE.MeshLambertMaterial({ map }),
+    ),
+    leaves: new THREE.MeshLambertMaterial({ map: leaves, transparent: true, alphaTest: 0.5 }),
   };
 
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const transform = new THREE.Object3D();
   const blockMeshes = [];
-  for (const type of ['grass', 'dirt', 'stone']) {
+  for (const type of BLOCK_TYPES) {
     const positions = blocks.filter((block) => block.type === type);
     const mesh = new THREE.InstancedMesh(geometry, materials[type], positions.length);
     positions.forEach((block, index) => {
@@ -95,12 +109,15 @@ function startGame() {
 
   const dropGeometry = new THREE.BoxGeometry(DROP_ITEM_SIZE, DROP_ITEM_SIZE, DROP_ITEM_SIZE);
   const droppedItems = [];
-  const inventoryLabels = {
-    grass: document.querySelector('#count-grass'),
-    dirt: document.querySelector('#count-dirt'),
-    stone: document.querySelector('#count-stone'),
-  };
-  let inventory = { grass: 0, dirt: 0, stone: 0 };
+  const inventoryLabels = Object.fromEntries(BLOCK_TYPES.map((type) => [
+    type,
+    document.querySelector(`#count-${type}`),
+  ]));
+  const inventoryIcons = Object.fromEntries(BLOCK_TYPES.map((type) => [
+    type,
+    document.querySelector(`#icon-${type}`),
+  ]));
+  let inventory = Object.fromEntries(BLOCK_TYPES.map((type) => [type, 0]));
 
   const crackMaterials = Array.from({ length: 10 }, (_, stage) => {
     const map = texture(`destroy_stage_${stage}`);
@@ -238,6 +255,8 @@ function startGame() {
       if (pickup.collected) {
         inventory = addInventoryItem(inventory, item.state.type);
         inventoryLabels[item.state.type].textContent = String(inventory[item.state.type]);
+        inventoryLabels[item.state.type].hidden = false;
+        inventoryIcons[item.state.type].hidden = false;
         scene.remove(item.mesh);
         droppedItems.splice(index, 1);
         continue;
@@ -295,7 +314,7 @@ function startGame() {
       scene.add(droppedMesh);
       droppedItems.push({ state: droppedState, mesh: droppedMesh });
       if (blockMeshes.every((blockMesh) => blockMesh.userData.blockPositions.length === 0)) {
-        const restored = restoreWorldIfEmpty([]);
+        const restored = restoreWorldIfEmpty([], worldSeed);
         for (const blockMesh of blockMeshes) {
           const positions = restored.filter((restoredBlock) => restoredBlock.type === blockMesh.userData.blockPositionsType);
           blockMesh.userData.blockPositions.splice(0, blockMesh.userData.blockPositions.length, ...positions);

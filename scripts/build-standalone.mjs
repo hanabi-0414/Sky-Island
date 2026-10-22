@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relativePath) => readFile(path.join(projectRoot, relativePath), 'utf8');
 
-const html = await read('index.template.html');
+let html = await read('index.template.html');
 const styles = await read('styles.css');
 const world = (await read('src/world.js')).replace(/^export\s+/gm, '');
 const worldSafety = (await read('src/world-safety.js'))
@@ -16,13 +16,21 @@ const playerInput = (await read('src/player-input.js')).replace(/^export\s+/gm, 
 let main = (await read('src/main.js')).replace(/^import\s+[\s\S]*?;\r?\n/gm, '');
 
 const textureNames = [
-  'grass_top', 'grass_side', 'dirt', 'stone',
+  'grass_top', 'grass_side', 'dirt', 'stone', 'sand', 'brick', 'planks', 'log_top', 'log_side', 'leaves',
   ...Array.from({ length: 10 }, (_, stage) => `destroy_stage_${stage}`),
 ];
 const inlineTextures = {};
 for (const name of textureNames) {
   const bytes = await readFile(path.join(projectRoot, `assets/sky-island-assets/textures/16px/${name}.png`));
   inlineTextures[name] = `data:image/png;base64,${bytes.toString('base64')}`;
+}
+const iconNames = ['grass', 'dirt', 'stone', 'sand', 'brick', 'planks', 'log', 'leaves'];
+for (const name of iconNames) {
+  const bytes = await readFile(path.join(projectRoot, `assets/sky-island-assets/icons/${name}.png`));
+  html = html.replaceAll(
+    `./assets/sky-island-assets/icons/${name}.png`,
+    `data:image/png;base64,${bytes.toString('base64')}`,
+  );
 }
 
 main = main.replace(

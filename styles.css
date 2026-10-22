@@ -50,30 +50,38 @@ canvas { display: block; width: 100%; height: 100%; }
   bottom: 20px;
   transform: translateX(-50%);
   display: grid;
-  grid-template-columns: repeat(3, minmax(72px, 88px));
+  width: min(560px, calc(100% - 24px));
+  grid-template-columns: repeat(8, minmax(44px, 1fr));
   gap: 8px;
   pointer-events: none;
 }
 
 .inventory-slot {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 42px;
-  padding: 7px 10px;
+  justify-content: center;
+  gap: 2px;
+  min-height: 52px;
+  padding: 4px;
   border: 1px solid rgb(255 255 255 / 55%);
   border-radius: 8px;
   background: rgb(20 38 51 / 78%);
   box-shadow: 0 2px 8px rgb(0 0 0 / 24%);
-  font-size: 12px;
   text-shadow: 0 1px 3px #193246;
 }
 
 .inventory-slot span:last-child {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
+}
+
+.inventory-icon {
+  width: 26px;
+  height: 26px;
+  image-rendering: pixelated;
+  object-fit: contain;
 }
 
 #start {
@@ -97,5 +105,8 @@ canvas { display: block; width: 100%; height: 100%; }
 @media (max-width: 600px) {
   #hud { inset: 12px; align-items: flex-start; flex-wrap: wrap; gap: 8px 14px; }
   .controls { order: 3; width: 100%; }
-  #inventory { bottom: 12px; grid-template-columns: repeat(3, minmax(68px, 80px)); gap: 6px; }
+  #inventory { bottom: 12px; grid-template-columns: repeat(8, minmax(32px, 1fr)); gap: 3px; }
+  .inventory-slot { min-height: 46px; padding: 3px 1px; }
+  .inventory-icon { width: 22px; height: 22px; }
+  .inventory-slot span:last-child { font-size: 13px; }
 }

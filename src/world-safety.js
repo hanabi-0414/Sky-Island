@@ -93,7 +93,22 @@ export function findSafeSpawnPoint(blocks, preferred = findSpawnPoint(), radius 
 }
 
 export function createInitialPlayerState(blocks, preferred = findSpawnPoint(), clearance = 0) {
-  const spawn = findSafeSpawnPoint(blocks, preferred);
+  let spawn = findSafeSpawnPoint(blocks, preferred);
+  if (clearance > 0 && blocks.length > 0) {
+    const highestBlockY = Math.max(...blocks.map((block) => block.y));
+    const supports = blocks.filter((block) => block.y === highestBlockY);
+    supports.sort((a, b) => {
+      const aDistance = (a.x - preferred.x) ** 2 + (a.z - preferred.z) ** 2;
+      const bDistance = (b.x - preferred.x) ** 2 + (b.z - preferred.z) ** 2;
+      return aDistance - bDistance;
+    });
+    const highestSupport = supports[0];
+    spawn = {
+      x: highestSupport.x,
+      y: highestSupport.y + 0.5 + PLAYER_EYE_HEIGHT,
+      z: highestSupport.z,
+    };
+  }
 
   return {
     x: spawn.x,
@@ -109,6 +124,6 @@ export function respawnIfInVoid({ eyeY, verticalSpeed, spawn, voidY = -12 }) {
   return { eyeY: spawn.y, verticalSpeed: 0, respawned: true };
 }
 
-export function restoreWorldIfEmpty(blocks) {
-  return blocks.length === 0 ? createIslandBlocks() : blocks;
+export function restoreWorldIfEmpty(blocks, seed) {
+  return blocks.length === 0 ? createIslandBlocks(seed) : blocks;
 }
