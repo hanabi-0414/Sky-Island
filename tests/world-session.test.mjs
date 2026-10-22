@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createWorldSession } from '../src/world-session.js';
 import { findNaturalSpawnPoint } from '../src/world-safety.js';
 import { isWorldRegenerationKey } from '../src/player-input.js';
+
+const standalone = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 
 const featureTypes = new Set(['log', 'leaves', 'brick', 'planks']);
 
@@ -52,4 +55,12 @@ test('只有 R 鍵會要求重新生成世界', () => {
   assert.equal(isWorldRegenerationKey('KeyR'), true);
   assert.equal(isWorldRegenerationKey('KeyW'), false);
   assert.equal(isWorldRegenerationKey('Space'), false);
+});
+
+test('獨立 index.html 按 R 會以新種子重建地形並重新選擇安全出生點', () => {
+  assert.match(standalone, /isWorldRegenerationKey\(event\.code\)/);
+  assert.match(standalone, /function regenerateWorld\(\)/);
+  assert.match(standalone, /worldSeed = Math\.floor\(Math\.random\(\) \* 0xffffffff\)/);
+  assert.match(standalone, /blocks = createIslandBlocks\(worldSeed\)/);
+  assert.match(standalone, /spawn = findNaturalSpawnPoint\(blocks, findSpawnPoint\(\)\)/);
 });
