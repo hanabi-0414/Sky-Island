@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createIslandBlocks, findSpawnPoint } from './world.js';
+import { beginGame } from './start-control.js';
 
 const game = document.querySelector('#game');
 const startButton = document.querySelector('#start');
@@ -79,6 +80,7 @@ function startGame() {
   let pitch = 0;
   let verticalSpeed = 0;
   let grounded = true;
+  let gameStarted = false;
   let lastTime = performance.now();
   let fpsFrames = 0;
   let fpsStart = lastTime;
@@ -97,15 +99,23 @@ function startGame() {
   window.addEventListener('keyup', (event) => keys.delete(event.code));
   window.addEventListener('blur', () => keys.clear());
 
-  renderer.domElement.addEventListener('click', () => {
-    if (document.pointerLockElement !== renderer.domElement) renderer.domElement.requestPointerLock();
-  });
-  startButton.addEventListener('click', () => renderer.domElement.requestPointerLock());
-  document.addEventListener('pointerlockchange', () => {
-    startButton.hidden = document.pointerLockElement === renderer.domElement;
-  });
+  const enterGame = () => beginGame(
+    () => {
+      gameStarted = true;
+      startButton.hidden = true;
+    },
+    () => {
+      if (document.pointerLockElement !== renderer.domElement) {
+        return renderer.domElement.requestPointerLock?.();
+      }
+      return undefined;
+    },
+  );
+  renderer.domElement.addEventListener('click', enterGame);
+  startButton.addEventListener('click', enterGame);
   document.addEventListener('mousemove', (event) => {
-    if (document.pointerLockElement !== renderer.domElement) return;
+    const isPointerLocked = document.pointerLockElement === renderer.domElement;
+    if (!gameStarted || (!isPointerLocked && event.target !== renderer.domElement)) return;
     yaw -= event.movementX * 0.002;
     pitch = THREE.MathUtils.clamp(pitch - event.movementY * 0.002, -1.45, 1.45);
     camera.rotation.order = 'YXZ';
