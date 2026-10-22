@@ -5,15 +5,77 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#bfe0f4" />
     <title>空中之島</title>
-    <link rel="stylesheet" href="./styles.css" />
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
-        }
-      }
-    </script>
-    <script type="module" src="./src/main.js"></script>
+    <style>
+* { box-sizing: border-box; }
+
+html, body, #game {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #bfe0f4;
+  color: #fff;
+  font-family: system-ui, "Microsoft JhengHei", sans-serif;
+}
+
+#game { position: relative; }
+canvas { display: block; width: 100%; height: 100%; }
+
+#hud {
+  position: absolute;
+  z-index: 2;
+  inset: 18px 20px auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  text-shadow: 0 1px 4px #193246;
+  pointer-events: none;
+}
+
+.brand { font-size: 18px; font-weight: 750; }
+.controls, #fps { font-size: 13px; }
+#fps { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+#crosshair {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -54%);
+  color: white;
+  font: 24px/1 monospace;
+  text-shadow: 0 1px 3px #172b3a;
+  pointer-events: none;
+}
+
+#start {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, 34px);
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 999px;
+  padding: 11px 20px;
+  color: white;
+  background: rgb(21 43 57 / 70%);
+  font: inherit;
+  cursor: pointer;
+}
+
+#start[hidden], #error[hidden] { display: none; }
+#error { position: absolute; z-index: 5; inset: auto 16px 16px; color: #fff; background: #842e2e; padding: 12px; }
+
+@media (max-width: 600px) {
+  #hud { inset: 12px; align-items: flex-start; flex-wrap: wrap; gap: 8px 14px; }
+  .controls { order: 3; width: 100%; }
+}
+
+</style>
+
   </head>
   <body>
     <main id="game" aria-label="空中之島遊戲">
@@ -26,5 +88,214 @@
       <button id="start" type="button">點擊畫面開始</button>
       <div id="error" role="alert" hidden></div>
     </main>
+  <script src="./vendor/three.min.js"></script>
+    <script>
+const INLINE_TEXTURES = {"grass_top":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACZklEQVR4ATxTy27UQBCseXnt2GHJA4SQOMDHgJREfAMcSEB8EuLEI+LALyHEgYAUhWyyD9tje6iaRVgeeezprq6uatvTT8dJ6+z8JJ2dH6e3X5+n08/H6cW7p/+/v/pwlE4/HuUz7V9/OUlvuF6+f5ZsbAeM/Ygxak0YuO/XA2ZNAWOAaZhQ7Hj40iNNCdOYAN4dY7S35W6BvUe7+XDsJ1hn4YNlUIIuJa//dBnMGAPDo82ig4CbgxJWlW9+r5kAhMorJ7Mw1qBdRmzZBFTzGfrNQACDIDbEzwzSBPjCAoY3V2RQvV+iW0UGA05sAFx+XyClBLVR3img6tozE8i0Zw5CVFBsR4hivV8hZo1YBcDQjbm6ikTGtLc9rHUmUw4zj/mDGp5PQ/rSJq4jxZ3gyLCkqIeP54QB1JZAFGN37+9kZLVwfbGE8wbGILcw0gEFiY0yr37c6gHrLcQ0t3D9cwkFJtqjYEVIZQmldwW54PSZbGT1uC1Clq5wsAN7UVB1d4btHmgOK8zqkJWXE+2yZ0Ug0CWJLorSa33VwgYOiSOlxcUK5p8eHe2L3QCxu/dkDsvvakNJcmyME8omQG7YnnbpYOAEWtKS0qouoTwpbq47FDshVxfI5qbnu8/uiJkNJUeU/tZ7ZdZCqAKr6LUhYEcnjAFaJoqJMQZqWSxmBLZ3HzaoOTiaMsehWbMi8bJoGiadbxY9qnkBT0Y1x7ehRoF6TPw37OLXCiuKETkwerIACuqiCoHDJeuUpDMlqaXLbwvquGVi1bNnoP6w5mCrviprPjJI6aChsRQ60rGKbjkOlgqxM/wFAAD//zztchcAAAAGSURBVAMAWHWDhv6UCwUAAAAASUVORK5CYII=","grass_side":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACoklEQVR4ATxTy2oUURSsvq9+ZGaSiQYMhmyyyMqF+AkmKgn+gVHJIuIH+ULIyrhwJyhR0I0Ed/ojRplnP24/rnUadNF0z7l161TVOaOOT++FR6/2w+PXd8LJ2UE4eXMQHjy7HU7ODsPRi71wfHo3PHl72L+fvrv/v370fC88fLkflM9rZOMEIQChA3zRwDgN/kK2GkMZBW0VlFbo2g5t00HOpbYy5nmkov6SJhARCNYEBghhtajRVC3mvwqYRMPnDfyyhmCFcDmpoP4BAz+M1Qhdh5s/A7Y/L7BzUcLEUgu4/nHWX8zWYux+q7B7UeEWcerGjxY730tsfVlg4/0fbH9dgv3RUG7dtNg8n2FwNUXqDK6dT7H1aY7JskThqa4LUC07CjjQdceCodfSN5D6eJDgyijF5ocpLzRQtNswgygCBCeqVWx0z74+TJAlFh2taKUwymLUVLEoPLLYQvOWI9ZZjY1RBmnWsqGaLCtYHkwWJbRi0iQwVKHYLS9rDFOHqqEi1kVpXtWQJvItJGrMzo4TiDgCRyKjFMR7QRuaRJfzAmXVQMDSMbacBm0k1sAzI1X5lh8dhpkDVfbhCVBIEoItSYRIQjT8ljPByWXGBlWRZZZXmNLK5azog1JEGK3hLPOJLQaJQ1k3SGMDZzQszwzJVpgZ9yD0RUnb0Uot8riJw9Risqj4lJAg5cIs98xL9Sqd1bTaQUUAVldiyFt8sTkv1JgzfSFcH6aQnHLmYNnV121PIiOUhwoAKUpovm0xHqScRtSPsWA+0r2i/PGATSJwPwLEqq87JM5ArXFZxF8fDnUsS4+Ou1hzB8B3FEVcohYyHcF4Zjag95b/vN+cEBUESMKiQkZUcHwyGenMPYF0X6NFmf2IO7HKBSNnH6wzGn8BAAD//+59+DMAAAAGSURBVAMATRCNZ57BWgMAAAAASUVORK5CYII=","dirt":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACgElEQVR4ATxTyYoUQRSMfLV0VfUyizPogHMQBO9edcbt6heIy4DiwY8QlEFBD/6eeBAVxQ1n6bX2NCJdusnu6nxbxItoe3L7sj+8v++f3rnin93d84cP9v3ze3vh95vHt/yLg2te368f3eTdVf/y4Lp/9fCG/1dnF86uoxgkSOMIWRrD8d33PtyZOdRNh6NZibJqGY/QdB3MOVw6vwnnHKxsWpwsSgySCG3Xh9N7j08/p1ixCHyN8oTJYIMYoyzFdFnx1PDMM03TVDND03ahEe+xuzUJRaM8RUdEZi5MPllUmBSD8CzElqURxkVKqC2GWRImJ7FBKJxzKOsWcWShQHTWhwO8/3YSBjkApmmCXpLrfNVgd3sSJjKGmogUm61qPvcQirbvcXFngxRIg/cmrkreHGUQV02MCJfDUdUd0iTCmXFOFA4Vh8yWddhTxoXr3nY2R1gRpmeXllydc9BeNFmUpA6vSLGDGq+RgugNBwkWZQNTUhwZ3n05QsGuOY8SmrbHkiosqyYUF9yPmuoYO9ak15GOHVNj+WB7UgQkknOddLbXir+LckjoERUJtuILNl2yeZpEsJjTK1IYUmvRIBNMKdXbz79YaBikUUCQME/LPJ5XEHchlU/UGEkSwbFSFLQkMxeSPnw/DfuYk2tLuKI7KdKggO6KQQxbG2ahWIs8pcMautE5F8zCnnRb+KTJegiFzphN4shxqQZblNSY8ozzNMijCSmNFDHh3MYQJa0ur0REVXOxmjZd/JFSklueJsEgCm5wedryxx9TVPRAJ1kBCKqaKKY/1tfjOX1hbN7B6rYN0PTHUNAInzV0HoN8lgIlEWqBI0qp2NYk/0/xNwAAAP//5mmbiQAAAAZJREFUAwDkkmb/D03yMwAAAABJRU5ErkJggg==","stone":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAACtklEQVR4ASRTaU/bQBB9u07s2LmMKoVDLVfKHeDPVaW0tKp6UKDAB35bgapHQlChaptAYie249jeziwrWV7tzrx5782sfPb8pTo+PVM7u3vqxe5rdXB0qj7sH6n3Hw/Vp8MTtX9wrD6fnOn9Dt3vvXmnXu291XE7lCP//f2DKIpgWQVACFxenCOOY/D6enkBwzDgeX3ovZSIRyNUXRfdbheOU4ScnZvXQY7j4PftDRqb22hftXRgY3ML93d3uG5fYW19A3nThE1xYRigUqlQoREkV+BquVwOc/MLSJIxGlvbiEYROp0OSuUyX0MpQBIDjgMEJccolyuQXDkMQwpQujJTZVmWZekqw8EA0zMzGpgBCoUC7RMUi0UtV4JWFIXoUrXllVU8fjKLWm2SKlcghIBFCa47gXw+jx/fv+kzTmbgpeUVSDZsYuIRpCEJCppJEARauxACEbFj2mwuA/u+h263A5MYSpIk2QPDkMjl8tpMlxyWdFEm7QxkUeBwONT+VKpVSixACgm+S9MUki9936eWOOj3e+BD/kbUrjgeISDHbdtBSP+QmAkIOKS/WnXBIJpBqVQCJxSLJQ0ihECWZVoOJ/d695icnKLqJs1EjzowAi9ugPaAWfAwsQxGTpJEJ+dJFgeOxzGYZavZpFm5JUNNDIeDBwa2bUNRtQftQvugVAZGr5L7oGXSAF21mqg/XcLCYh3cSmYohIBM0wRCClycf9H6QRqv222N7vt9cAEpDaysrlHlPFrNn2AvJBnNuTIYBgjDCFPT03rePa+HGumtui6NcJs0e2AGnueRP32sbzQQkyTDMAjcgTQtk6bKoa+EjcamnrJarQbQ7C7W67i9+YUCyeR3wp+i8yxT4A7xQEl+hbZdxGDgQ2paGTEKwSsMQnpEDQ3GEzpHb4UBeEbSNNOd+w8AAP//FAKd+QAAAAZJREFUAwAzE3jkCh30lwAAAABJRU5ErkJggg=="};
+const WORLD_LIMIT = 32;
+
+function isWithinWorldBounds(x, y, z) {
+  const half = WORLD_LIMIT / 2;
+  return [x, y, z].every((value) => Number.isFinite(value) && value >= -half && value < half);
+}
+
+function createIslandBlocks() {
+  const blocks = [];
+  const layers = [
+    { y: 0, width: 16, type: 'grass' },
+    { y: -1, width: 12, type: 'dirt' },
+    { y: -2, width: 8, type: 'dirt' },
+    { y: -3, width: 4, type: 'stone' },
+  ];
+
+  for (const { y, width, type } of layers) {
+    const start = -width / 2;
+    for (let x = start; x < start + width; x += 1) {
+      for (let z = start; z < start + width; z += 1) {
+        blocks.push({ x, y, z, type });
+      }
+    }
+  }
+
+  return blocks;
+}
+
+function findSpawnPoint() {
+  return { x: 0, y: 2.2, z: 0 };
+}
+
+function beginGame(onStart, requestPointerLock) {
+  onStart();
+
+  try {
+    const result = requestPointerLock?.();
+    if (result && typeof result.catch === 'function') result.catch(() => {});
+  } catch {
+    // 指標鎖定只是視角控制的輔助；瀏覽器拒絕時仍可開始遊戲。
+  }
+}
+
+
+const game = document.querySelector('#game');
+const startButton = document.querySelector('#start');
+const errorBox = document.querySelector('#error');
+const fpsLabel = document.querySelector('#fps');
+
+try {
+  startGame();
+} catch (error) {
+  errorBox.hidden = false;
+  errorBox.textContent = `遊戲載入失敗：${error.message}`;
+  throw error;
+}
+
+function startGame() {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#bfe0f4');
+
+  const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 100);
+  const spawn = findSpawnPoint();
+  camera.position.set(spawn.x, spawn.y, spawn.z);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  game.prepend(renderer.domElement);
+
+  scene.add(new THREE.HemisphereLight(0xe8f6ff, 0x68604e, 2.0));
+  const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+  sun.position.set(-8, 18, 10);
+  scene.add(sun);
+
+  const loader = new THREE.TextureLoader();
+  const texture = (name) => {
+    const map = loader.load(INLINE_TEXTURES[name]);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.magFilter = THREE.NearestFilter;
+    map.minFilter = THREE.NearestFilter;
+    return map;
+  };
+  const grassTop = texture('grass_top');
+  const grassSide = texture('grass_side');
+  const dirt = texture('dirt');
+  const stone = texture('stone');
+  const grassMaterials = [
+    new THREE.MeshLambertMaterial({ map: grassSide }),
+    new THREE.MeshLambertMaterial({ map: grassSide }),
+    new THREE.MeshLambertMaterial({ map: grassTop }),
+    new THREE.MeshLambertMaterial({ map: dirt }),
+    new THREE.MeshLambertMaterial({ map: grassSide }),
+    new THREE.MeshLambertMaterial({ map: grassSide }),
+  ];
+  const materials = {
+    grass: grassMaterials,
+    dirt: new THREE.MeshLambertMaterial({ map: dirt }),
+    stone: new THREE.MeshLambertMaterial({ map: stone }),
+  };
+
+  const blocks = createIslandBlocks();
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  const transform = new THREE.Object3D();
+  for (const type of ['grass', 'dirt', 'stone']) {
+    const positions = blocks.filter((block) => block.type === type);
+    const mesh = new THREE.InstancedMesh(geometry, materials[type], positions.length);
+    positions.forEach((block, index) => {
+      transform.position.set(block.x, block.y, block.z);
+      transform.updateMatrix();
+      mesh.setMatrixAt(index, transform.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    scene.add(mesh);
+  }
+
+  const keys = new Set();
+  let yaw = 0;
+  let pitch = 0;
+  let verticalSpeed = 0;
+  let grounded = true;
+  let gameStarted = false;
+  let lastTime = performance.now();
+  let fpsFrames = 0;
+  let fpsStart = lastTime;
+  const eyeHeight = 1.7;
+  const islandTop = 0.5;
+  const groundEyeY = islandTop + eyeHeight;
+
+  window.addEventListener('keydown', (event) => {
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
+    keys.add(event.code);
+    if (event.code === 'Space' && grounded) {
+      verticalSpeed = 7.1;
+      grounded = false;
+    }
+  });
+  window.addEventListener('keyup', (event) => keys.delete(event.code));
+  window.addEventListener('blur', () => keys.clear());
+
+  const enterGame = () => beginGame(
+    () => {
+      gameStarted = true;
+      startButton.hidden = true;
+    },
+    () => {
+      if (document.pointerLockElement !== renderer.domElement) {
+        return renderer.domElement.requestPointerLock?.();
+      }
+      return undefined;
+    },
+  );
+  renderer.domElement.addEventListener('click', enterGame);
+  startButton.addEventListener('click', enterGame);
+  document.addEventListener('mousemove', (event) => {
+    const isPointerLocked = document.pointerLockElement === renderer.domElement;
+    if (!gameStarted || (!isPointerLocked && event.target !== renderer.domElement)) return;
+    yaw -= event.movementX * 0.002;
+    pitch = THREE.MathUtils.clamp(pitch - event.movementY * 0.002, -1.45, 1.45);
+    camera.rotation.order = 'YXZ';
+    camera.rotation.set(pitch, yaw, 0);
+  });
+
+  function updatePlayer(delta) {
+    const forward = Number(keys.has('KeyW')) - Number(keys.has('KeyS'));
+    const sideways = Number(keys.has('KeyD')) - Number(keys.has('KeyA'));
+    const length = Math.hypot(forward, sideways) || 1;
+    const speed = 5.2 * delta / length;
+    const nextX = camera.position.x + (sideways * Math.cos(yaw) - forward * Math.sin(yaw)) * speed;
+    const nextZ = camera.position.z + (-sideways * Math.sin(yaw) - forward * Math.cos(yaw)) * speed;
+    camera.position.x = THREE.MathUtils.clamp(nextX, -7.25, 6.25);
+    camera.position.z = THREE.MathUtils.clamp(nextZ, -7.25, 6.25);
+
+    verticalSpeed -= 19 * delta;
+    camera.position.y += verticalSpeed * delta;
+    if (camera.position.y <= groundEyeY) {
+      camera.position.y = groundEyeY;
+      verticalSpeed = 0;
+      grounded = true;
+    }
+  }
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const delta = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+    updatePlayer(delta);
+    renderer.render(scene, camera);
+    fpsFrames += 1;
+    if (now - fpsStart >= 1000) {
+      fpsLabel.textContent = `${Math.round(fpsFrames * 1000 / (now - fpsStart))} FPS`;
+      fpsFrames = 0;
+      fpsStart = now;
+    }
+  }
+  requestAnimationFrame(animate);
+
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+}
+
+    </script>
   </body>
 </html>
