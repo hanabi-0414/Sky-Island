@@ -427,7 +427,8 @@ function findNaturalSpawnPoint(blocks, preferred = findSpawnPoint(), radius = 0.
   const featureTypes = new Set(['log', 'leaves', 'brick', 'planks']);
   const candidates = blocks.filter((support) => {
     if (!naturalTypes.has(support.type)) return false;
-    const eyeY = support.y + 0.5 + PLAYER_EYE_HEIGHT;
+    const feetY = support.y + 0.5;
+    const eyeY = feetY + PLAYER_EYE_HEIGHT;
     const clearanceBottom = support.y - 1.5;
     const clearanceTop = eyeY + 1;
     return !blocks.some((block) => {
@@ -449,9 +450,12 @@ function findNaturalSpawnPoint(blocks, preferred = findSpawnPoint(), radius = 0.
   });
 
   const support = candidates[0];
-  return support
-    ? { x: support.x, y: support.y + 0.5 + PLAYER_EYE_HEIGHT, z: support.z }
-    : findSafeSpawnPoint(blocks, preferred, radius);
+  if (!support) return findSafeSpawnPoint(blocks, preferred, radius);
+  return {
+    x: support.x,
+    y: support.y + 0.5 + PLAYER_EYE_HEIGHT,
+    z: support.z,
+  };
 }
 
 function createInitialPlayerState(blocks, preferred = findSpawnPoint(), clearance = 0) {
@@ -503,6 +507,10 @@ function beginGame(onStart, requestPointerLock) {
 
 function shouldStartJump(keys, grounded) {
   return grounded && keys.has('Space');
+}
+
+function isWorldRegenerationKey(code) {
+  return code === 'KeyR';
 }
 
 function getMovementInput(keys) {
@@ -648,79 +656,6 @@ function addInventoryItem(inventory, type) {
   return { ...inventory, [type]: inventory[type] + 1 };
 }
 
-function stepInventorySelection(currentIndex, direction, slotCount) {
-  if (!Number.isInteger(slotCount) || slotCount < 1) return 0;
-  const current = Number.isInteger(currentIndex)
-    ? ((currentIndex % slotCount) + slotCount) % slotCount
-    : 0;
-  return (current + Math.sign(direction) + slotCount) % slotCount;
-}
-
-function getInventoryIndexFromKey(code, slotCount) {
-  const match = /^(?:Digit|Numpad)([1-9])$/.exec(code);
-  if (!match) return null;
-  const index = Number(match[1]) - 1;
-  return index < slotCount ? index : null;
-}
-
-const DAY_SETTINGS = Object.freeze({
-  background: '#bfe0f4',
-  hemisphereIntensity: 2,
-  sunIntensity: 2.2,
-});
-const NIGHT_SETTINGS = Object.freeze({
-  background: '#17283e',
-  hemisphereIntensity: 1.05,
-  sunIntensity: 0.85,
-});
-
-function isDayNightToggleKey(code) {
-  return code === 'KeyN';
-}
-
-function isWorldRegenerationKey(code) {
-  return code === 'KeyR';
-}
-
-function createDayNightController() {
-  let isNight = false;
-  return {
-    get isNight() { return isNight; },
-    get settings() { return { ...(isNight ? NIGHT_SETTINGS : DAY_SETTINGS) }; },
-    toggle() {
-      isNight = !isNight;
-      return isNight;
-    },
-  };
-}
-
-function tryPlaceBlock({ blocks, source, normal, type, inventory }) {
-  const amount = inventory[type];
-  const axisValues = [normal?.x, normal?.y, normal?.z];
-  const isFaceNormal = axisValues.filter((value) => value === 1 || value === -1).length === 1 &&
-    axisValues.every((value) => value === 0 || value === 1 || value === -1);
-  if (!Object.hasOwn(inventory, type) || amount <= 0 || !isFaceNormal) {
-    return { blocks, inventory, placed: false, position: null };
-  }
-  const position = {
-    x: source.x + normal.x,
-    y: source.y + normal.y,
-    z: source.z + normal.z,
-  };
-  if (!isWithinWorldBounds(position.x, position.y, position.z) ||
-      blocks.some((block) =>
-        block.x === position.x && block.y === position.y && block.z === position.z,
-      )) {
-    return { blocks, inventory, placed: false, position };
-  }
-  return {
-    blocks: [...blocks, { ...position, type }],
-    inventory: { ...inventory, [type]: amount - 1 },
-    placed: true,
-    position,
-  };
-}
-
 
 const game = document.querySelector('#game');
 const startButton = document.querySelector('#start');
@@ -739,22 +674,17 @@ function startGame() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#bfe0f4');
 
-  let worldSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
-  let blocks = createIslandBlocks(worldSeed);
-  let spawn = findNaturalSpawnPoint(blocks, findSpawnPoint());
-  const highestTerrainY = (worldBlocks) => Math.max(...worldBlocks
-    .filter((block) => ['grass', 'dirt', 'stone', 'sand'].includes(block.type))
-    .map((block) => block.y + 0.5));
-  const initialPlayer = {
-    x: spawn.x,
-    y: Math.max(spawn.y + 0.1, highestTerrainY(blocks) + PLAYER_EYE_HEIGHT + 0.1),
-    z: spawn.z,
-    verticalSpeed: 0,
-    grounded: false,
-  };
+  let worldSession = createWorldSession(Math.floor(Math.random() * 0xffffffff) >>> 0);
+  let worldSeed = worldSession.seed;
+  let spawn = worldSession.spawn;
+  const blocks = worldSession.blocks;
 
   const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 100);
-  camera.position.set(initialPlayer.x, initialPlayer.y - CAMERA_VIEW_OFFSET, initialPlayer.z);
+  camera.position.set(
+    worldSession.player.x,
+    worldSession.player.y - CAMERA_VIEW_OFFSET,
+    worldSession.player.z,
+  );
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
@@ -822,25 +752,20 @@ function startGame() {
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const transform = new THREE.Object3D();
   const blockMeshes = [];
-  const rebuildBlockMeshes = (worldBlocks) => {
-    for (const mesh of blockMeshes) scene.remove(mesh);
-    blockMeshes.length = 0;
-    for (const type of BLOCK_TYPES) {
-      const positions = worldBlocks.filter((block) => block.type === type);
-      const mesh = new THREE.InstancedMesh(geometry, materials[type], positions.length);
-      positions.forEach((block, index) => {
-        transform.position.set(block.x, block.y, block.z);
-        transform.updateMatrix();
-        mesh.setMatrixAt(index, transform.matrix);
-      });
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.userData.blockPositions = positions;
-      mesh.userData.blockPositionsType = type;
-      blockMeshes.push(mesh);
-      scene.add(mesh);
-    }
-  };
-  rebuildBlockMeshes(blocks);
+  for (const type of BLOCK_TYPES) {
+    const positions = blocks.filter((block) => block.type === type);
+    const mesh = new THREE.InstancedMesh(geometry, materials[type], positions.length);
+    positions.forEach((block, index) => {
+      transform.position.set(block.x, block.y, block.z);
+      transform.updateMatrix();
+      mesh.setMatrixAt(index, transform.matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.userData.blockPositions = positions;
+    mesh.userData.blockPositionsType = type;
+    blockMeshes.push(mesh);
+    scene.add(mesh);
+  }
 
   const dropGeometry = new THREE.BoxGeometry(DROP_ITEM_SIZE, DROP_ITEM_SIZE, DROP_ITEM_SIZE);
   const droppedItems = [];
@@ -886,9 +811,9 @@ function startGame() {
   const keys = new Set();
   let yaw = 0;
   let pitch = 0;
-  let verticalSpeed = initialPlayer.verticalSpeed;
-  let grounded = initialPlayer.grounded;
-  let playerEyeY = initialPlayer.y;
+  let verticalSpeed = worldSession.player.verticalSpeed;
+  let grounded = worldSession.player.grounded;
+  let playerEyeY = worldSession.player.y;
   let gameStarted = false;
   let miningHeld = false;
   let lastTime = performance.now();
@@ -911,7 +836,7 @@ function startGame() {
     }
     if (isWorldRegenerationKey(event.code)) {
       event.preventDefault();
-      if (!event.repeat) regenerateWorld();
+      regenerateWorld();
       return;
     }
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
@@ -944,22 +869,98 @@ function startGame() {
   });
 
   function regenerateWorld() {
-    const previousSeed = worldSeed;
-    worldSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
-    while (worldSeed === previousSeed) worldSeed = (worldSeed + 1) >>> 0;
-    blocks = createIslandBlocks(worldSeed);
-    spawn = findNaturalSpawnPoint(blocks, findSpawnPoint());
-    rebuildBlockMeshes(blocks);
+    let nextSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
+    while (nextSeed === worldSeed) nextSeed = (nextSeed + 1) >>> 0;
+    worldSession = createWorldSession(nextSeed);
+    worldSeed = worldSession.seed;
+    spawn = worldSession.spawn;
+
+    for (const mesh of blockMeshes) scene.remove(mesh);
+    blockMeshes.splice(0, blockMeshes.length);
+    for (const type of BLOCK_TYPES) {
+      const positions = worldSession.blocks.filter((block) => block.type === type);
+      const mesh = new THREE.InstancedMesh(geometry, materials[type], positions.length);
+      positions.forEach((block, index) => {
+        transform.position.set(block.x, block.y, block.z);
+        transform.updateMatrix();
+        mesh.setMatrixAt(index, transform.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.blockPositions = positions;
+      mesh.userData.blockPositionsType = type;
+      blockMeshes.push(mesh);
+      scene.add(mesh);
+    }
+
     droppedItems.forEach((item) => scene.remove(item.mesh));
     droppedItems.length = 0;
-    playerEyeY = Math.max(spawn.y + 0.1, highestTerrainY(blocks) + PLAYER_EYE_HEIGHT + 0.1);
-    camera.position.set(spawn.x, playerEyeY - CAMERA_VIEW_OFFSET, spawn.z);
-    verticalSpeed = 0;
-    grounded = false;
+    playerEyeY = worldSession.player.y;
+    camera.position.set(worldSession.player.x, playerEyeY - CAMERA_VIEW_OFFSET, worldSession.player.z);
+    verticalSpeed = worldSession.player.verticalSpeed;
+    grounded = worldSession.player.grounded;
     keys.clear();
     miningHeld = false;
     mining.update({ target: null, held: false, delta: 0, type: null });
     crackOverlay.visible = false;
+  }
+
+  function placeTargetedBlock() {
+    raycaster.setFromCamera(screenCenter, camera);
+    const hit = raycaster.intersectObjects(blockMeshes, false)[0];
+    if (!hit || !Number.isInteger(hit.instanceId) || !hit.face) return;
+    const source = hit.object.userData.blockPositions[hit.instanceId];
+    if (!source) return;
+
+    const type = BLOCK_TYPES[selectedInventoryIndex];
+    const blocks = blockMeshes.flatMap((mesh) => mesh.userData.blockPositions);
+    const result = tryPlaceBlock({
+      blocks,
+      source,
+      normal: hit.face.normal,
+      type,
+      inventory,
+    });
+    if (!result.placed) return;
+
+    worldSession.blocks = result.blocks;
+    inventory = result.inventory;
+    const count = inventoryLabels[type];
+    const icon = inventoryIcons[type];
+    const hasItems = inventory[type] > 0;
+    count.textContent = String(inventory[type]);
+    count.hidden = !hasItems;
+    icon.hidden = !hasItems;
+    addPlacedBlockToMesh(result.blocks[result.blocks.length - 1]);
+  }
+
+  function addPlacedBlockToMesh(block) {
+    const meshIndex = blockMeshes.findIndex((mesh) => mesh.userData.blockPositionsType === block.type);
+    const mesh = blockMeshes[meshIndex];
+    const positions = mesh.userData.blockPositions;
+    positions.push(block);
+
+    if (positions.length > mesh.instanceMatrix.count) {
+      const expanded = new THREE.InstancedMesh(geometry, materials[block.type], positions.length);
+      positions.forEach((position, index) => {
+        transform.position.set(position.x, position.y, position.z);
+        transform.updateMatrix();
+        expanded.setMatrixAt(index, transform.matrix);
+      });
+      expanded.instanceMatrix.needsUpdate = true;
+      expanded.userData.blockPositions = positions;
+      expanded.userData.blockPositionsType = block.type;
+      scene.remove(mesh);
+      blockMeshes[meshIndex] = expanded;
+      scene.add(expanded);
+      return;
+    }
+
+    transform.position.set(block.x, block.y, block.z);
+    transform.updateMatrix();
+    mesh.setMatrixAt(positions.length - 1, transform.matrix);
+    mesh.count = positions.length;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
   }
 
   const enterGame = () => beginGame(
@@ -1064,56 +1065,6 @@ function startGame() {
       item.mesh.position.set(item.state.x, item.state.y, item.state.z);
       item.mesh.rotation.set(item.state.rotation * 0.7, item.state.rotation, 0);
     }
-  }
-
-  function placeTargetedBlock() {
-    raycaster.setFromCamera(screenCenter, camera);
-    const hit = raycaster.intersectObjects(blockMeshes, false)[0];
-    if (!hit || !Number.isInteger(hit.instanceId) || !hit.face) return;
-    const source = hit.object.userData.blockPositions[hit.instanceId];
-    if (!source) return;
-
-    const type = BLOCK_TYPES[selectedInventoryIndex];
-    const blocks = blockMeshes.flatMap((mesh) => mesh.userData.blockPositions);
-    const result = tryPlaceBlock({ blocks, source, normal: hit.face.normal, type, inventory });
-    if (!result.placed) return;
-
-    inventory = result.inventory;
-    const count = inventoryLabels[type];
-    const icon = inventoryIcons[type];
-    const hasItems = inventory[type] > 0;
-    count.textContent = String(inventory[type]);
-    count.hidden = !hasItems;
-    icon.hidden = !hasItems;
-    addPlacedBlockToMesh(result.blocks[result.blocks.length - 1]);
-  }
-
-  function addPlacedBlockToMesh(block) {
-    const meshIndex = blockMeshes.findIndex((mesh) => mesh.userData.blockPositionsType === block.type);
-    const mesh = blockMeshes[meshIndex];
-    const positions = mesh.userData.blockPositions;
-    positions.push(block);
-    if (positions.length > mesh.instanceMatrix.count) {
-      const expanded = new THREE.InstancedMesh(geometry, materials[block.type], positions.length);
-      positions.forEach((position, index) => {
-        transform.position.set(position.x, position.y, position.z);
-        transform.updateMatrix();
-        expanded.setMatrixAt(index, transform.matrix);
-      });
-      expanded.instanceMatrix.needsUpdate = true;
-      expanded.userData.blockPositions = positions;
-      expanded.userData.blockPositionsType = block.type;
-      scene.remove(mesh);
-      blockMeshes[meshIndex] = expanded;
-      scene.add(expanded);
-      return;
-    }
-    transform.position.set(block.x, block.y, block.z);
-    transform.updateMatrix();
-    mesh.setMatrixAt(positions.length - 1, transform.matrix);
-    mesh.count = positions.length;
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.computeBoundingSphere();
   }
 
   function updateMining(delta) {
