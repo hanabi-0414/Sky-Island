@@ -13,7 +13,7 @@ const worldSafety = (await read('src/world-safety.js'))
   .replace(/^export\s+/gm, '');
 const startControl = (await read('src/start-control.js')).replace(/^export\s+/gm, '');
 const playerInput = (await read('src/player-input.js')).replace(/^export\s+/gm, '');
-let main = (await read('src/main.js')).replace(/^import\s+.*;\r?\n/gm, '');
+let main = (await read('src/main.js')).replace(/^import\s+[\s\S]*?;\r?\n/gm, '');
 
 const textureNames = [
   'grass_top', 'grass_side', 'dirt', 'stone',

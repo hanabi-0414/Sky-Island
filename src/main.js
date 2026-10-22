@@ -3,7 +3,12 @@ import { createIslandBlocks, findSpawnPoint, PLAYER_EYE_HEIGHT } from './world.j
 import { beginGame } from './start-control.js';
 import { getMovementInput, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
-import { restoreWorldIfEmpty, respawnIfInVoid, stepVerticalPhysics } from './world-safety.js';
+import {
+  resolvePlayerMovement,
+  restoreWorldIfEmpty,
+  respawnIfInVoid,
+  stepVerticalPhysics,
+} from './world-safety.js';
 
 const game = document.querySelector('#game');
 const startButton = document.querySelector('#start');
@@ -161,11 +166,21 @@ function startGame() {
     const speed = 5.2 * delta / length;
     const nextX = camera.position.x + (sideways * Math.cos(yaw) - forward * Math.sin(yaw)) * speed;
     const nextZ = camera.position.z + (-sideways * Math.sin(yaw) - forward * Math.cos(yaw)) * speed;
-    camera.position.x = THREE.MathUtils.clamp(nextX, -15.5, 15.5);
-    camera.position.z = THREE.MathUtils.clamp(nextZ, -15.5, 15.5);
+    const blocks = blockMeshes.flatMap((mesh) => mesh.userData.blockPositions);
+    const movement = resolvePlayerMovement({
+      blocks,
+      x: camera.position.x,
+      z: camera.position.z,
+      nextX: THREE.MathUtils.clamp(nextX, -15.5, 15.5),
+      nextZ: THREE.MathUtils.clamp(nextZ, -15.5, 15.5),
+      eyeY: camera.position.y,
+      eyeHeight,
+    });
+    camera.position.x = movement.x;
+    camera.position.z = movement.z;
 
     const physics = stepVerticalPhysics({
-      blocks: blockMeshes.flatMap((mesh) => mesh.userData.blockPositions),
+      blocks,
       x: camera.position.x,
       z: camera.position.z,
       eyeY: camera.position.y,

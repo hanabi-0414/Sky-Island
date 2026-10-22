@@ -32,6 +32,32 @@ export function stepVerticalPhysics({
   return { eyeY: nextEyeY, verticalSpeed: nextVerticalSpeed, grounded: false };
 }
 
+export function resolvePlayerMovement({
+  blocks,
+  x,
+  z,
+  nextX,
+  nextZ,
+  eyeY,
+  eyeHeight = PLAYER_EYE_HEIGHT,
+  radius = 0.3,
+}) {
+  const feetY = eyeY - eyeHeight;
+  const collides = (candidateX, candidateZ) => blocks.some((block) => {
+    const blockBottom = block.y - 0.5;
+    const blockTop = block.y + 0.5;
+    const overlapsVertically = feetY < blockTop - 1e-6 && eyeY > blockBottom + 1e-6;
+    const overlapsHorizontally =
+      Math.abs(candidateX - block.x) < radius + 0.5 &&
+      Math.abs(candidateZ - block.z) < radius + 0.5;
+    return overlapsVertically && overlapsHorizontally;
+  });
+
+  const resolvedX = collides(nextX, z) ? x : nextX;
+  const resolvedZ = collides(resolvedX, nextZ) ? z : nextZ;
+  return { x: resolvedX, z: resolvedZ };
+}
+
 export function respawnIfInVoid({ eyeY, verticalSpeed, spawn, voidY = -12 }) {
   if (eyeY >= voidY) return { eyeY, verticalSpeed, respawned: false };
   return { eyeY: spawn.y, verticalSpeed: 0, respawned: true };

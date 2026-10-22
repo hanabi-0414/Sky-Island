@@ -157,6 +157,32 @@ function stepVerticalPhysics({
   return { eyeY: nextEyeY, verticalSpeed: nextVerticalSpeed, grounded: false };
 }
 
+function resolvePlayerMovement({
+  blocks,
+  x,
+  z,
+  nextX,
+  nextZ,
+  eyeY,
+  eyeHeight = PLAYER_EYE_HEIGHT,
+  radius = 0.3,
+}) {
+  const feetY = eyeY - eyeHeight;
+  const collides = (candidateX, candidateZ) => blocks.some((block) => {
+    const blockBottom = block.y - 0.5;
+    const blockTop = block.y + 0.5;
+    const overlapsVertically = feetY < blockTop - 1e-6 && eyeY > blockBottom + 1e-6;
+    const overlapsHorizontally =
+      Math.abs(candidateX - block.x) < radius + 0.5 &&
+      Math.abs(candidateZ - block.z) < radius + 0.5;
+    return overlapsVertically && overlapsHorizontally;
+  });
+
+  const resolvedX = collides(nextX, z) ? x : nextX;
+  const resolvedZ = collides(resolvedX, nextZ) ? z : nextZ;
+  return { x: resolvedX, z: resolvedZ };
+}
+
 function respawnIfInVoid({ eyeY, verticalSpeed, spawn, voidY = -12 }) {
   if (eyeY >= voidY) return { eyeY, verticalSpeed, respawned: false };
   return { eyeY: spawn.y, verticalSpeed: 0, respawned: true };
@@ -383,11 +409,21 @@ function startGame() {
     const speed = 5.2 * delta / length;
     const nextX = camera.position.x + (sideways * Math.cos(yaw) - forward * Math.sin(yaw)) * speed;
     const nextZ = camera.position.z + (-sideways * Math.sin(yaw) - forward * Math.cos(yaw)) * speed;
-    camera.position.x = THREE.MathUtils.clamp(nextX, -15.5, 15.5);
-    camera.position.z = THREE.MathUtils.clamp(nextZ, -15.5, 15.5);
+    const blocks = blockMeshes.flatMap((mesh) => mesh.userData.blockPositions);
+    const movement = resolvePlayerMovement({
+      blocks,
+      x: camera.position.x,
+      z: camera.position.z,
+      nextX: THREE.MathUtils.clamp(nextX, -15.5, 15.5),
+      nextZ: THREE.MathUtils.clamp(nextZ, -15.5, 15.5),
+      eyeY: camera.position.y,
+      eyeHeight,
+    });
+    camera.position.x = movement.x;
+    camera.position.z = movement.z;
 
     const physics = stepVerticalPhysics({
-      blocks: blockMeshes.flatMap((mesh) => mesh.userData.blockPositions),
+      blocks,
       x: camera.position.x,
       z: camera.position.z,
       eyeY: camera.position.y,
