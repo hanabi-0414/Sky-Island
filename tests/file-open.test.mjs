@@ -17,6 +17,10 @@ test('index.html 以本機傳統 script 載入 three.js', () => {
   assert.match(html, /<script\s+src=["']\.\/vendor\/three\.min\.js["']/i);
 });
 
+test('index.html 內含建立世界會話所需的函式', () => {
+  assert.match(html, /function createWorldSession\(seed/);
+});
+
 test('遊戲 script 在頁面控制項建立後才執行', () => {
   assert.ok(html.indexOf('<script src="./vendor/three.min.js">') > html.indexOf('</main>'));
 });
