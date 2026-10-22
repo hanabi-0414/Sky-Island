@@ -30,11 +30,11 @@ function startGame() {
   scene.background = new THREE.Color('#bfe0f4');
 
   const blocks = createIslandBlocks();
-  const initialPlayer = createInitialPlayerState(blocks, findSpawnPoint());
-  const spawn = { x: initialPlayer.x, y: initialPlayer.y, z: initialPlayer.z };
+  const spawn = findSafeSpawnPoint(blocks, findSpawnPoint());
+  const initialPlayer = createInitialPlayerState(blocks, spawn, 0.1);
 
   const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 100);
-  camera.position.set(spawn.x, spawn.y, spawn.z);
+  camera.position.set(initialPlayer.x, initialPlayer.y, initialPlayer.z);
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
