@@ -133,7 +133,7 @@ canvas { display: block; width: 100%; height: 100%; }
     <main id="game" aria-label="空中之島遊戲">
       <div id="hud">
         <div class="brand">空中之島</div>
-        <div class="controls">WASD 移動・空白鍵跳躍・滑鼠轉向・滾輪或 1–8 選取方塊</div>
+        <div class="controls">WASD 移動・空白鍵跳躍・滑鼠轉向・滾輪或 1–8 選取方塊・N 切換日夜</div>
         <div id="fps" aria-live="off">-- FPS</div>
       </div>
       <div id="crosshair" aria-hidden="true">+</div>
@@ -631,6 +631,33 @@ function getInventoryIndexFromKey(code, slotCount) {
   return index < slotCount ? index : null;
 }
 
+const DAY_SETTINGS = Object.freeze({
+  background: '#bfe0f4',
+  hemisphereIntensity: 2,
+  sunIntensity: 2.2,
+});
+const NIGHT_SETTINGS = Object.freeze({
+  background: '#17283e',
+  hemisphereIntensity: 1.05,
+  sunIntensity: 0.85,
+});
+
+function isDayNightToggleKey(code) {
+  return code === 'KeyN';
+}
+
+function createDayNightController() {
+  let isNight = false;
+  return {
+    get isNight() { return isNight; },
+    get settings() { return { ...(isNight ? NIGHT_SETTINGS : DAY_SETTINGS) }; },
+    toggle() {
+      isNight = !isNight;
+      return isNight;
+    },
+  };
+}
+
 function tryPlaceBlock({ blocks, source, normal, type, inventory }) {
   const amount = inventory[type];
   const axisValues = [normal?.x, normal?.y, normal?.z];
@@ -690,10 +717,23 @@ function startGame() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   game.prepend(renderer.domElement);
 
-  scene.add(new THREE.HemisphereLight(0xe8f6ff, 0x68604e, 2.0));
+  const hemisphereLight = new THREE.HemisphereLight(0xe8f6ff, 0x68604e, 2.0);
+  scene.add(hemisphereLight);
   const sun = new THREE.DirectionalLight(0xffffff, 2.2);
   sun.position.set(-8, 18, 10);
   scene.add(sun);
+  const dayNight = createDayNightController();
+  const applyDayNightSettings = () => {
+    const settings = dayNight.settings;
+    scene.background.set(settings.background);
+    hemisphereLight.intensity = settings.hemisphereIntensity;
+    sun.intensity = settings.sunIntensity;
+  };
+  const toggleDayNight = () => {
+    dayNight.toggle();
+    applyDayNightSettings();
+  };
+  applyDayNightSettings();
 
   const loader = new THREE.TextureLoader();
   const texture = (name) => {
@@ -807,6 +847,11 @@ function startGame() {
   const eyeHeight = PLAYER_EYE_HEIGHT;
 
   window.addEventListener('keydown', (event) => {
+    if (isDayNightToggleKey(event.code)) {
+      event.preventDefault();
+      if (!event.repeat) toggleDayNight();
+      return;
+    }
     const inventoryIndex = getInventoryIndexFromKey(event.code, inventorySlots.length);
     if (inventoryIndex != null) {
       event.preventDefault();

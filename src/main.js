@@ -4,6 +4,7 @@ import { beginGame } from './start-control.js';
 import { getMovementInput, isWorldRegenerationKey, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
 import { createDroppedItem, DROP_ITEM_SIZE, stepDroppedItem } from './drop-item.js';
+import { createDayNightController, isDayNightToggleKey } from './day-night.js';
 import { addInventoryItem, stepPickupItem } from './pickup-control.js';
 import { getInventoryIndexFromKey, stepInventorySelection } from './inventory-selection.js';
 import { tryPlaceBlock } from './placement-control.js';
@@ -51,10 +52,23 @@ function startGame() {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   game.prepend(renderer.domElement);
 
-  scene.add(new THREE.HemisphereLight(0xe8f6ff, 0x68604e, 2.0));
+  const hemisphereLight = new THREE.HemisphereLight(0xe8f6ff, 0x68604e, 2.0);
+  scene.add(hemisphereLight);
   const sun = new THREE.DirectionalLight(0xffffff, 2.2);
   sun.position.set(-8, 18, 10);
   scene.add(sun);
+  const dayNight = createDayNightController();
+  const applyDayNightSettings = () => {
+    const settings = dayNight.settings;
+    scene.background.set(settings.background);
+    hemisphereLight.intensity = settings.hemisphereIntensity;
+    sun.intensity = settings.sunIntensity;
+  };
+  const toggleDayNight = () => {
+    dayNight.toggle();
+    applyDayNightSettings();
+  };
+  applyDayNightSettings();
 
   const loader = new THREE.TextureLoader();
   const texture = (name) => {
@@ -168,6 +182,11 @@ function startGame() {
   const eyeHeight = PLAYER_EYE_HEIGHT;
 
   window.addEventListener('keydown', (event) => {
+    if (isDayNightToggleKey(event.code)) {
+      event.preventDefault();
+      if (!event.repeat) toggleDayNight();
+      return;
+    }
     const inventoryIndex = getInventoryIndexFromKey(event.code, inventorySlots.length);
     if (inventoryIndex != null) {
       event.preventDefault();
