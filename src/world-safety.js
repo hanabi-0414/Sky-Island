@@ -113,13 +113,15 @@ export function findNaturalSpawnPoint(blocks, preferred = findSpawnPoint(), radi
     if (!naturalTypes.has(support.type)) return false;
     const feetY = support.y + 0.5;
     const eyeY = feetY + PLAYER_EYE_HEIGHT;
+    const clearanceBottom = support.y - 1.5;
+    const clearanceTop = eyeY + 1;
     return !blocks.some((block) => {
       const overlapsHorizontally =
         Math.abs(support.x - block.x) < radius + 0.5 &&
         Math.abs(support.z - block.z) < radius + 0.5;
       const overlapsVertically =
-        feetY < block.y + 0.5 - 1e-6 &&
-        eyeY > block.y - 0.5 + 1e-6;
+        clearanceBottom < block.y + 0.5 - 1e-6 &&
+        clearanceTop > block.y - 0.5 + 1e-6;
       return featureTypes.has(block.type) && overlapsHorizontally && overlapsVertically;
     });
   });

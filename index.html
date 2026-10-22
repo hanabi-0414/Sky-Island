@@ -133,7 +133,7 @@ canvas { display: block; width: 100%; height: 100%; }
     <main id="game" aria-label="空中之島遊戲">
       <div id="hud">
         <div class="brand">空中之島</div>
-        <div class="controls">WASD 移動・空白鍵跳躍・滑鼠轉向・滾輪或 1–8 選取方塊・N 切換日夜</div>
+        <div class="controls">WASD 移動・空白鍵跳躍・滑鼠轉向・滾輪或 1–8 選取方塊・N 切換日夜・R 重生成地形</div>
         <div id="fps" aria-live="off">-- FPS</div>
       </div>
       <div id="crosshair" aria-hidden="true">+</div>
@@ -422,6 +422,38 @@ function findSafeSpawnPoint(blocks, preferred = findSpawnPoint(), radius = 0.3) 
   };
 }
 
+function findNaturalSpawnPoint(blocks, preferred = findSpawnPoint(), radius = 0.3) {
+  const naturalTypes = new Set(['grass', 'dirt', 'stone', 'sand']);
+  const featureTypes = new Set(['log', 'leaves', 'brick', 'planks']);
+  const candidates = blocks.filter((support) => {
+    if (!naturalTypes.has(support.type)) return false;
+    const eyeY = support.y + 0.5 + PLAYER_EYE_HEIGHT;
+    const clearanceBottom = support.y - 1.5;
+    const clearanceTop = eyeY + 1;
+    return !blocks.some((block) => {
+      const overlapsHorizontally =
+        Math.abs(support.x - block.x) < radius + 0.5 &&
+        Math.abs(support.z - block.z) < radius + 0.5;
+      const overlapsVertically =
+        clearanceBottom < block.y + 0.5 - 1e-6 &&
+        clearanceTop > block.y - 0.5 + 1e-6;
+      return featureTypes.has(block.type) && overlapsHorizontally && overlapsVertically;
+    });
+  });
+
+  candidates.sort((a, b) => {
+    const aHorizontal = (a.x - preferred.x) ** 2 + (a.z - preferred.z) ** 2;
+    const bHorizontal = (b.x - preferred.x) ** 2 + (b.z - preferred.z) ** 2;
+    if (aHorizontal !== bHorizontal) return aHorizontal - bHorizontal;
+    return b.y - a.y;
+  });
+
+  const support = candidates[0];
+  return support
+    ? { x: support.x, y: support.y + 0.5 + PLAYER_EYE_HEIGHT, z: support.z }
+    : findSafeSpawnPoint(blocks, preferred, radius);
+}
+
 function createInitialPlayerState(blocks, preferred = findSpawnPoint(), clearance = 0) {
   let spawn = findSafeSpawnPoint(blocks, preferred);
   if (clearance > 0 && blocks.length > 0) {
@@ -646,6 +678,10 @@ function isDayNightToggleKey(code) {
   return code === 'KeyN';
 }
 
+function isWorldRegenerationKey(code) {
+  return code === 'KeyR';
+}
+
 function createDayNightController() {
   let isNight = false;
   return {
@@ -703,10 +739,19 @@ function startGame() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#bfe0f4');
 
-  const worldSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
-  const blocks = createIslandBlocks(worldSeed);
-  const spawn = findSafeSpawnPoint(blocks, findSpawnPoint());
-  const initialPlayer = createInitialPlayerState(blocks, spawn, 0.1);
+  let worldSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
+  let blocks = createIslandBlocks(worldSeed);
+  let spawn = findNaturalSpawnPoint(blocks, findSpawnPoint());
+  const highestTerrainY = (worldBlocks) => Math.max(...worldBlocks
+    .filter((block) => ['grass', 'dirt', 'stone', 'sand'].includes(block.type))
+    .map((block) => block.y + 0.5));
+  const initialPlayer = {
+    x: spawn.x,
+    y: Math.max(spawn.y + 0.1, highestTerrainY(blocks) + PLAYER_EYE_HEIGHT + 0.1),
+    z: spawn.z,
+    verticalSpeed: 0,
+    grounded: false,
+  };
 
   const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 100);
   camera.position.set(initialPlayer.x, initialPlayer.y - CAMERA_VIEW_OFFSET, initialPlayer.z);
@@ -777,20 +822,25 @@ function startGame() {
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   const transform = new THREE.Object3D();
   const blockMeshes = [];
-  for (const type of BLOCK_TYPES) {
-    const positions = blocks.filter((block) => block.type === type);
-    const mesh = new THREE.InstancedMesh(geometry, materials[type], positions.length);
-    positions.forEach((block, index) => {
-      transform.position.set(block.x, block.y, block.z);
-      transform.updateMatrix();
-      mesh.setMatrixAt(index, transform.matrix);
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.userData.blockPositions = positions;
-    mesh.userData.blockPositionsType = type;
-    blockMeshes.push(mesh);
-    scene.add(mesh);
-  }
+  const rebuildBlockMeshes = (worldBlocks) => {
+    for (const mesh of blockMeshes) scene.remove(mesh);
+    blockMeshes.length = 0;
+    for (const type of BLOCK_TYPES) {
+      const positions = worldBlocks.filter((block) => block.type === type);
+      const mesh = new THREE.InstancedMesh(geometry, materials[type], positions.length);
+      positions.forEach((block, index) => {
+        transform.position.set(block.x, block.y, block.z);
+        transform.updateMatrix();
+        mesh.setMatrixAt(index, transform.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.blockPositions = positions;
+      mesh.userData.blockPositionsType = type;
+      blockMeshes.push(mesh);
+      scene.add(mesh);
+    }
+  };
+  rebuildBlockMeshes(blocks);
 
   const dropGeometry = new THREE.BoxGeometry(DROP_ITEM_SIZE, DROP_ITEM_SIZE, DROP_ITEM_SIZE);
   const droppedItems = [];
@@ -859,6 +909,11 @@ function startGame() {
       updateInventorySelection();
       return;
     }
+    if (isWorldRegenerationKey(event.code)) {
+      event.preventDefault();
+      if (!event.repeat) regenerateWorld();
+      return;
+    }
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     keys.add(event.code);
   });
@@ -887,6 +942,25 @@ function startGame() {
   window.addEventListener('mouseup', (event) => {
     if (event.button === 0) miningHeld = false;
   });
+
+  function regenerateWorld() {
+    const previousSeed = worldSeed;
+    worldSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
+    while (worldSeed === previousSeed) worldSeed = (worldSeed + 1) >>> 0;
+    blocks = createIslandBlocks(worldSeed);
+    spawn = findNaturalSpawnPoint(blocks, findSpawnPoint());
+    rebuildBlockMeshes(blocks);
+    droppedItems.forEach((item) => scene.remove(item.mesh));
+    droppedItems.length = 0;
+    playerEyeY = Math.max(spawn.y + 0.1, highestTerrainY(blocks) + PLAYER_EYE_HEIGHT + 0.1);
+    camera.position.set(spawn.x, playerEyeY - CAMERA_VIEW_OFFSET, spawn.z);
+    verticalSpeed = 0;
+    grounded = false;
+    keys.clear();
+    miningHeld = false;
+    mining.update({ target: null, held: false, delta: 0, type: null });
+    crackOverlay.visible = false;
+  }
 
   const enterGame = () => beginGame(
     () => {
