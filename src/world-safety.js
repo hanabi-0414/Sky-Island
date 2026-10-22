@@ -9,6 +9,7 @@ export function stepVerticalPhysics({
   delta,
   eyeHeight = PLAYER_EYE_HEIGHT,
   gravity = 19,
+  radius = 0.3,
 }) {
   const currentFeetY = eyeY - eyeHeight;
   const nextVerticalSpeed = verticalSpeed - gravity * delta;
@@ -18,8 +19,8 @@ export function stepVerticalPhysics({
   if (nextVerticalSpeed <= 0) {
     const landingTop = blocks.reduce((highest, block) => {
       const top = block.y + 0.5;
-      const overlapsX = x >= block.x - 0.5 && x <= block.x + 0.5;
-      const overlapsZ = z >= block.z - 0.5 && z <= block.z + 0.5;
+      const overlapsX = x + radius > block.x - 0.5 && x - radius < block.x + 0.5;
+      const overlapsZ = z + radius > block.z - 0.5 && z - radius < block.z + 0.5;
       const crossesTop = top <= currentFeetY + 1e-6 && top >= nextFeetY - 1e-6;
       return overlapsX && overlapsZ && crossesTop ? Math.max(highest, top) : highest;
     }, -Infinity);
