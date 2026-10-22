@@ -35,10 +35,13 @@ test('下落中的玩家碰到方塊頂面會停在方塊上', () => {
 });
 
 test('跳起碰到上方方塊底面時會停住，不會穿過方塊', () => {
-  const blocks = [{ x: 0, y: 3, z: 0, type: 'stone' }];
-  let state = { eyeY: 2.35, verticalSpeed: 7.1, grounded: false };
+  const blocks = [
+    { x: 0, y: -1, z: 0, type: 'grass' },
+    { x: 0, y: 3, z: 0, type: 'stone' },
+  ];
+  let state = { eyeY: 1.5, verticalSpeed: 7.1, grounded: false };
 
-  for (let frame = 0; frame < 10; frame += 1) {
+  for (let frame = 0; frame < 30; frame += 1) {
     const result = stepVerticalPhysics({
       blocks,
       x: 0,
@@ -46,7 +49,7 @@ test('跳起碰到上方方塊底面時會停住，不會穿過方塊', () => {
       eyeY: state.eyeY,
       verticalSpeed: state.verticalSpeed,
       delta: 1 / 60,
-      eyeHeight: 1.85,
+      eyeHeight: 2,
     });
     state = result;
     if (state.verticalSpeed === 0) break;
