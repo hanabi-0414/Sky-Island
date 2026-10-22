@@ -92,6 +92,40 @@ export function findSafeSpawnPoint(blocks, preferred = findSpawnPoint(), radius 
   };
 }
 
+export function findNaturalSpawnPoint(blocks, preferred = findSpawnPoint(), radius = 0.3) {
+  const naturalTypes = new Set(['grass', 'dirt', 'stone', 'sand']);
+  const featureTypes = new Set(['log', 'leaves', 'brick', 'planks']);
+  const candidates = blocks.filter((support) => {
+    if (!naturalTypes.has(support.type)) return false;
+    const feetY = support.y + 0.5;
+    const eyeY = feetY + PLAYER_EYE_HEIGHT;
+    return !blocks.some((block) => {
+      const overlapsHorizontally =
+        Math.abs(support.x - block.x) < radius + 0.5 &&
+        Math.abs(support.z - block.z) < radius + 0.5;
+      const overlapsVertically =
+        feetY < block.y + 0.5 - 1e-6 &&
+        eyeY > block.y - 0.5 + 1e-6;
+      return featureTypes.has(block.type) && overlapsHorizontally && overlapsVertically;
+    });
+  });
+
+  candidates.sort((a, b) => {
+    const aHorizontal = (a.x - preferred.x) ** 2 + (a.z - preferred.z) ** 2;
+    const bHorizontal = (b.x - preferred.x) ** 2 + (b.z - preferred.z) ** 2;
+    if (aHorizontal !== bHorizontal) return aHorizontal - bHorizontal;
+    return b.y - a.y;
+  });
+
+  const support = candidates[0];
+  if (!support) return findSafeSpawnPoint(blocks, preferred, radius);
+  return {
+    x: support.x,
+    y: support.y + 0.5 + PLAYER_EYE_HEIGHT,
+    z: support.z,
+  };
+}
+
 export function createInitialPlayerState(blocks, preferred = findSpawnPoint(), clearance = 0) {
   let spawn = findSafeSpawnPoint(blocks, preferred);
   if (clearance > 0 && blocks.length > 0) {

@@ -2,6 +2,10 @@ export function shouldStartJump(keys, grounded) {
   return grounded && keys.has('Space');
 }
 
+export function isWorldRegenerationKey(code) {
+  return code === 'KeyR';
+}
+
 export function getMovementInput(keys) {
   return {
     forward: Number(keys.has('KeyW') || keys.has('ArrowUp')) -

@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { BLOCK_TYPES, createIslandBlocks, findSpawnPoint, PLAYER_EYE_HEIGHT } from './world.js';
+import { BLOCK_TYPES, PLAYER_EYE_HEIGHT } from './world.js';
 import { beginGame } from './start-control.js';
-import { getMovementInput, shouldStartJump } from './player-input.js';
+import { getMovementInput, isWorldRegenerationKey, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
 import { createDroppedItem, DROP_ITEM_SIZE, stepDroppedItem } from './drop-item.js';
 import { addInventoryItem, stepPickupItem } from './pickup-control.js';
+import { createWorldSession } from './world-session.js';
 import {
   resolvePlayerMovement,
-  createInitialPlayerState,
   findSafeSpawnPoint,
   restoreWorldIfEmpty,
   respawnIfInVoid,
@@ -31,13 +31,13 @@ function startGame() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#bfe0f4');
 
-  const worldSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
-  const blocks = createIslandBlocks(worldSeed);
-  const spawn = findSafeSpawnPoint(blocks, findSpawnPoint());
-  const initialPlayer = createInitialPlayerState(blocks, spawn, 0.1);
+  let worldSession = createWorldSession(Math.floor(Math.random() * 0xffffffff) >>> 0);
+  let worldSeed = worldSession.seed;
+  let spawn = worldSession.spawn;
+  const blocks = worldSession.blocks;
 
   const camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 100);
-  camera.position.set(initialPlayer.x, initialPlayer.y, initialPlayer.z);
+  camera.position.set(worldSession.player.x, worldSession.player.y, worldSession.player.z);
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'low-power' });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
@@ -140,8 +140,8 @@ function startGame() {
   const keys = new Set();
   let yaw = 0;
   let pitch = 0;
-  let verticalSpeed = initialPlayer.verticalSpeed;
-  let grounded = initialPlayer.grounded;
+  let verticalSpeed = worldSession.player.verticalSpeed;
+  let grounded = worldSession.player.grounded;
   let gameStarted = false;
   let miningHeld = false;
   let lastTime = performance.now();
@@ -150,6 +150,11 @@ function startGame() {
   const eyeHeight = PLAYER_EYE_HEIGHT;
 
   window.addEventListener('keydown', (event) => {
+    if (isWorldRegenerationKey(event.code)) {
+      event.preventDefault();
+      regenerateWorld();
+      return;
+    }
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     keys.add(event.code);
   });
@@ -164,6 +169,41 @@ function startGame() {
   window.addEventListener('mouseup', (event) => {
     if (event.button === 0) miningHeld = false;
   });
+
+  function regenerateWorld() {
+    let nextSeed = Math.floor(Math.random() * 0xffffffff) >>> 0;
+    while (nextSeed === worldSeed) nextSeed = (nextSeed + 1) >>> 0;
+    worldSession = createWorldSession(nextSeed);
+    worldSeed = worldSession.seed;
+    spawn = worldSession.spawn;
+
+    for (const mesh of blockMeshes) scene.remove(mesh);
+    blockMeshes.splice(0, blockMeshes.length);
+    for (const type of BLOCK_TYPES) {
+      const positions = worldSession.blocks.filter((block) => block.type === type);
+      const mesh = new THREE.InstancedMesh(geometry, materials[type], positions.length);
+      positions.forEach((block, index) => {
+        transform.position.set(block.x, block.y, block.z);
+        transform.updateMatrix();
+        mesh.setMatrixAt(index, transform.matrix);
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.userData.blockPositions = positions;
+      mesh.userData.blockPositionsType = type;
+      blockMeshes.push(mesh);
+      scene.add(mesh);
+    }
+
+    droppedItems.forEach((item) => scene.remove(item.mesh));
+    droppedItems.length = 0;
+    camera.position.set(worldSession.player.x, worldSession.player.y, worldSession.player.z);
+    verticalSpeed = worldSession.player.verticalSpeed;
+    grounded = worldSession.player.grounded;
+    keys.clear();
+    miningHeld = false;
+    mining.update({ target: null, held: false, delta: 0, type: null });
+    crackOverlay.visible = false;
+  }
 
   const enterGame = () => beginGame(
     () => {
