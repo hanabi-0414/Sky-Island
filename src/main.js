@@ -5,6 +5,7 @@ import { getMovementInput, isWorldRegenerationKey, shouldStartJump } from './pla
 import { createMiningController } from './mining-control.js';
 import { createDroppedItem, DROP_ITEM_SIZE, stepDroppedItem } from './drop-item.js';
 import { addInventoryItem, stepPickupItem } from './pickup-control.js';
+import { getInventoryIndexFromKey, stepInventorySelection } from './inventory-selection.js';
 import { createWorldSession } from './world-session.js';
 import {
   resolvePlayerMovement,
@@ -117,7 +118,18 @@ function startGame() {
     type,
     document.querySelector(`#icon-${type}`),
   ]));
+  const inventorySlots = [...document.querySelectorAll('.inventory-slot')];
   let inventory = Object.fromEntries(BLOCK_TYPES.map((type) => [type, 0]));
+  let selectedInventoryIndex = 0;
+
+  const updateInventorySelection = () => {
+    inventorySlots.forEach((slot, index) => {
+      const selected = index === selectedInventoryIndex;
+      slot.classList.toggle('selected', selected);
+      slot.setAttribute('aria-selected', String(selected));
+    });
+  };
+  updateInventorySelection();
 
   const crackMaterials = Array.from({ length: 10 }, (_, stage) => {
     const map = texture(`destroy_stage_${stage}`);
@@ -150,6 +162,13 @@ function startGame() {
   const eyeHeight = PLAYER_EYE_HEIGHT;
 
   window.addEventListener('keydown', (event) => {
+    const inventoryIndex = getInventoryIndexFromKey(event.code, inventorySlots.length);
+    if (inventoryIndex != null) {
+      event.preventDefault();
+      selectedInventoryIndex = inventoryIndex;
+      updateInventorySelection();
+      return;
+    }
     if (isWorldRegenerationKey(event.code)) {
       event.preventDefault();
       regenerateWorld();
@@ -158,6 +177,15 @@ function startGame() {
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     keys.add(event.code);
   });
+  window.addEventListener('wheel', (event) => {
+    if (event.deltaY === 0) return;
+    selectedInventoryIndex = stepInventorySelection(
+      selectedInventoryIndex,
+      Math.sign(event.deltaY),
+      inventorySlots.length,
+    );
+    updateInventorySelection();
+  }, { passive: true });
   window.addEventListener('keyup', (event) => keys.delete(event.code));
   window.addEventListener('blur', () => {
     keys.clear();

@@ -79,6 +79,13 @@ canvas { display: block; width: 100%; height: 100%; }
   text-shadow: 0 1px 3px #193246;
 }
 
+.inventory-slot.selected {
+  border-color: #ffe66d;
+  outline: 3px solid #ffe66d;
+  box-shadow: 0 0 14px rgb(255 230 109 / 85%);
+  transform: translateY(-4px);
+}
+
 .inventory-slot span:last-child {
   font-size: 15px;
   font-weight: 750;
@@ -126,7 +133,7 @@ canvas { display: block; width: 100%; height: 100%; }
     <main id="game" aria-label="空中之島遊戲">
       <div id="hud">
         <div class="brand">空中之島</div>
-        <div class="controls">WASD 移動・空白鍵跳躍・滑鼠轉向</div>
+        <div class="controls">WASD 移動・空白鍵跳躍・滑鼠轉向・滾輪或 1–8 選取方塊</div>
         <div id="fps" aria-live="off">-- FPS</div>
       </div>
       <div id="crosshair" aria-hidden="true">+</div>
@@ -594,6 +601,21 @@ function addInventoryItem(inventory, type) {
   return { ...inventory, [type]: inventory[type] + 1 };
 }
 
+function stepInventorySelection(currentIndex, direction, slotCount) {
+  if (!Number.isInteger(slotCount) || slotCount < 1) return 0;
+  const current = Number.isInteger(currentIndex)
+    ? ((currentIndex % slotCount) + slotCount) % slotCount
+    : 0;
+  return (current + Math.sign(direction) + slotCount) % slotCount;
+}
+
+function getInventoryIndexFromKey(code, slotCount) {
+  const match = /^(?:Digit|Numpad)([1-9])$/.exec(code);
+  if (!match) return null;
+  const index = Number(match[1]) - 1;
+  return index < slotCount ? index : null;
+}
+
 
 const game = document.querySelector('#game');
 const startButton = document.querySelector('#start');
@@ -698,7 +720,18 @@ function startGame() {
     type,
     document.querySelector(`#icon-${type}`),
   ]));
+  const inventorySlots = [...document.querySelectorAll('.inventory-slot')];
   let inventory = Object.fromEntries(BLOCK_TYPES.map((type) => [type, 0]));
+  let selectedInventoryIndex = 0;
+
+  const updateInventorySelection = () => {
+    inventorySlots.forEach((slot, index) => {
+      const selected = index === selectedInventoryIndex;
+      slot.classList.toggle('selected', selected);
+      slot.setAttribute('aria-selected', String(selected));
+    });
+  };
+  updateInventorySelection();
 
   const crackMaterials = Array.from({ length: 10 }, (_, stage) => {
     const map = texture(`destroy_stage_${stage}`);
@@ -731,9 +764,25 @@ function startGame() {
   const eyeHeight = PLAYER_EYE_HEIGHT;
 
   window.addEventListener('keydown', (event) => {
+    const inventoryIndex = getInventoryIndexFromKey(event.code, inventorySlots.length);
+    if (inventoryIndex != null) {
+      event.preventDefault();
+      selectedInventoryIndex = inventoryIndex;
+      updateInventorySelection();
+      return;
+    }
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
     keys.add(event.code);
   });
+  window.addEventListener('wheel', (event) => {
+    if (event.deltaY === 0) return;
+    selectedInventoryIndex = stepInventorySelection(
+      selectedInventoryIndex,
+      Math.sign(event.deltaY),
+      inventorySlots.length,
+    );
+    updateInventorySelection();
+  }, { passive: true });
   window.addEventListener('keyup', (event) => keys.delete(event.code));
   window.addEventListener('blur', () => {
     keys.clear();
