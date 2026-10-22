@@ -16,3 +16,7 @@ test('index.html 不必透過相對路徑載入遊戲程式或素材', () => {
 test('index.html 以本機傳統 script 載入 three.js', () => {
   assert.match(html, /<script\s+src=["']\.\/vendor\/three\.min\.js["']/i);
 });
+
+test('遊戲 script 在頁面控制項建立後才執行', () => {
+  assert.ok(html.indexOf('<script src="./vendor/three.min.js">') > html.indexOf('</main>'));
+});
