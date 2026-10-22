@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorldSession } from '../src/world-session.js';
+import { findNaturalSpawnPoint } from '../src/world-safety.js';
 import { isWorldRegenerationKey } from '../src/player-input.js';
 
 const featureTypes = new Set(['log', 'leaves', 'brick', 'planks']);
@@ -31,6 +32,20 @@ test('重新生成世界使用新種子，且重新套用安全出生點規則',
   assert.notDeepEqual(regenerated.blocks, first.blocks);
   assertClearSpawn(regenerated);
   assert.ok(regenerated.player.y >= regenerated.highestTerrainY + 2 + 0.1);
+});
+
+test('出生點正下方與玩家上方有樹木或建物時，改選沒有這些方塊的位置', () => {
+  const blocks = [
+    { x: 0, y: 0, z: 0, type: 'grass' },
+    { x: 0, y: -1, z: 0, type: 'log' },
+    { x: 0, y: 3, z: 0, type: 'planks' },
+    { x: 3, y: 0, z: 0, type: 'grass' },
+  ];
+
+  assert.deepEqual(
+    findNaturalSpawnPoint(blocks, { x: 0, y: 2.5, z: 0 }),
+    { x: 3, y: 2.5, z: 0 },
+  );
 });
 
 test('只有 R 鍵會要求重新生成世界', () => {
