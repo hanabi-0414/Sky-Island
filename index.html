@@ -51,6 +51,39 @@ canvas { display: block; width: 100%; height: 100%; }
   pointer-events: none;
 }
 
+#inventory {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(72px, 88px));
+  gap: 8px;
+  pointer-events: none;
+}
+
+.inventory-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 42px;
+  padding: 7px 10px;
+  border: 1px solid rgb(255 255 255 / 55%);
+  border-radius: 8px;
+  background: rgb(20 38 51 / 78%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 24%);
+  font-size: 12px;
+  text-shadow: 0 1px 3px #193246;
+}
+
+.inventory-slot span:last-child {
+  font-size: 18px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
 #start {
   position: absolute;
   z-index: 3;
@@ -72,6 +105,7 @@ canvas { display: block; width: 100%; height: 100%; }
 @media (max-width: 600px) {
   #hud { inset: 12px; align-items: flex-start; flex-wrap: wrap; gap: 8px 14px; }
   .controls { order: 3; width: 100%; }
+  #inventory { bottom: 12px; grid-template-columns: repeat(3, minmax(68px, 80px)); gap: 6px; }
 }
 
 </style>
@@ -85,6 +119,11 @@ canvas { display: block; width: 100%; height: 100%; }
         <div id="fps" aria-live="off">-- FPS</div>
       </div>
       <div id="crosshair" aria-hidden="true">+</div>
+      <div id="inventory" aria-label="方塊欄">
+        <div class="inventory-slot"><span>草地</span><span id="count-grass">0</span></div>
+        <div class="inventory-slot"><span>泥土</span><span id="count-dirt">0</span></div>
+        <div class="inventory-slot"><span>石頭</span><span id="count-stone">0</span></div>
+      </div>
       <button id="start" type="button">點擊畫面開始</button>
       <div id="error" role="alert" hidden></div>
     </main>
@@ -355,6 +394,47 @@ function stepDroppedItem(item, blocks, delta) {
   };
 }
 
+const PICKUP_RADIUS = 1.5;
+
+const PICKUP_SPEED = 5;
+const PICKUP_ARRIVAL_DISTANCE = 0.12;
+
+function stepPickupItem(item, player, delta) {
+  const dx = player.x - item.x;
+  const dy = player.y - item.y;
+  const dz = player.z - item.z;
+  const distance = Math.hypot(dx, dy, dz);
+  const collecting = item.collecting || distance <= PICKUP_RADIUS;
+
+  if (!collecting) return { item, collected: false };
+  if (distance <= Math.max(PICKUP_SPEED * Math.max(0, delta), PICKUP_ARRIVAL_DISTANCE)) {
+    return {
+      item: { ...item, x: player.x, y: player.y, z: player.z, collecting: true },
+      collected: true,
+    };
+  }
+
+  const step = PICKUP_SPEED * Math.max(0, delta);
+  const ratio = step / distance;
+  return {
+    item: {
+      ...item,
+      x: item.x + dx * ratio,
+      y: item.y + dy * ratio,
+      z: item.z + dz * ratio,
+      collecting: true,
+      grounded: false,
+      verticalSpeed: 0,
+    },
+    collected: false,
+  };
+}
+
+function addInventoryItem(inventory, type) {
+  if (!Object.hasOwn(inventory, type)) return inventory;
+  return { ...inventory, [type]: inventory[type] + 1 };
+}
+
 
 const game = document.querySelector('#game');
 const startButton = document.querySelector('#start');
@@ -437,6 +517,12 @@ function startGame() {
 
   const dropGeometry = new THREE.BoxGeometry(DROP_ITEM_SIZE, DROP_ITEM_SIZE, DROP_ITEM_SIZE);
   const droppedItems = [];
+  const inventoryLabels = {
+    grass: document.querySelector('#count-grass'),
+    dirt: document.querySelector('#count-dirt'),
+    stone: document.querySelector('#count-stone'),
+  };
+  let inventory = { grass: 0, dirt: 0, stone: 0 };
 
   const crackMaterials = Array.from({ length: 10 }, (_, stage) => {
     const map = texture(`destroy_stage_${stage}`);
@@ -558,8 +644,27 @@ function startGame() {
 
   function updateDroppedItems(delta) {
     const blocks = blockMeshes.flatMap((mesh) => mesh.userData.blockPositions);
-    for (const item of droppedItems) {
-      item.state = stepDroppedItem(item.state, blocks, delta);
+    const player = {
+      x: camera.position.x,
+      y: camera.position.y - eyeHeight * 0.55,
+      z: camera.position.z,
+    };
+    for (let index = droppedItems.length - 1; index >= 0; index -= 1) {
+      const item = droppedItems[index];
+      const fallingState = item.state.collecting
+        ? item.state
+        : stepDroppedItem(item.state, blocks, delta);
+      const pickup = stepPickupItem(fallingState, player, delta);
+      item.state = pickup.item;
+
+      if (pickup.collected) {
+        inventory = addInventoryItem(inventory, item.state.type);
+        inventoryLabels[item.state.type].textContent = String(inventory[item.state.type]);
+        scene.remove(item.mesh);
+        droppedItems.splice(index, 1);
+        continue;
+      }
+
       item.mesh.position.set(item.state.x, item.state.y, item.state.z);
       item.mesh.rotation.set(item.state.rotation * 0.7, item.state.rotation, 0);
     }

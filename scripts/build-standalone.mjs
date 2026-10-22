@@ -35,7 +35,8 @@ if (main.includes('./assets/') || main.includes('import ')) {
 
 const miningControl = (await read('src/mining-control.js')).replace(/^export\s+/gm, '');
 const dropItem = (await read('src/drop-item.js')).replace(/^export\s+/gm, '');
-const standaloneScript = `const INLINE_TEXTURES = ${JSON.stringify(inlineTextures)};\n${world}\n${worldSafety}\n${startControl}\n${playerInput}\n${miningControl}\n${dropItem}\n${main}`;
+const pickupControl = (await read('src/pickup-control.js')).replace(/^export\s+/gm, '');
+const standaloneScript = `const INLINE_TEXTURES = ${JSON.stringify(inlineTextures)};\n${world}\n${worldSafety}\n${startControl}\n${playerInput}\n${miningControl}\n${dropItem}\n${pickupControl}\n${main}`;
 const withoutModuleMap = html.replace(/\s*<script type="importmap">[\s\S]*?<\/script>/, '');
 const withInlineStyles = withoutModuleMap.replace(
   '<link rel="stylesheet" href="./styles.css" />',

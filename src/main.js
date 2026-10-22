@@ -4,6 +4,7 @@ import { beginGame } from './start-control.js';
 import { getMovementInput, shouldStartJump } from './player-input.js';
 import { createMiningController } from './mining-control.js';
 import { createDroppedItem, DROP_ITEM_SIZE, stepDroppedItem } from './drop-item.js';
+import { addInventoryItem, stepPickupItem } from './pickup-control.js';
 import {
   resolvePlayerMovement,
   createInitialPlayerState,
@@ -94,6 +95,12 @@ function startGame() {
 
   const dropGeometry = new THREE.BoxGeometry(DROP_ITEM_SIZE, DROP_ITEM_SIZE, DROP_ITEM_SIZE);
   const droppedItems = [];
+  const inventoryLabels = {
+    grass: document.querySelector('#count-grass'),
+    dirt: document.querySelector('#count-dirt'),
+    stone: document.querySelector('#count-stone'),
+  };
+  let inventory = { grass: 0, dirt: 0, stone: 0 };
 
   const crackMaterials = Array.from({ length: 10 }, (_, stage) => {
     const map = texture(`destroy_stage_${stage}`);
@@ -215,8 +222,27 @@ function startGame() {
 
   function updateDroppedItems(delta) {
     const blocks = blockMeshes.flatMap((mesh) => mesh.userData.blockPositions);
-    for (const item of droppedItems) {
-      item.state = stepDroppedItem(item.state, blocks, delta);
+    const player = {
+      x: camera.position.x,
+      y: camera.position.y - eyeHeight * 0.55,
+      z: camera.position.z,
+    };
+    for (let index = droppedItems.length - 1; index >= 0; index -= 1) {
+      const item = droppedItems[index];
+      const fallingState = item.state.collecting
+        ? item.state
+        : stepDroppedItem(item.state, blocks, delta);
+      const pickup = stepPickupItem(fallingState, player, delta);
+      item.state = pickup.item;
+
+      if (pickup.collected) {
+        inventory = addInventoryItem(inventory, item.state.type);
+        inventoryLabels[item.state.type].textContent = String(inventory[item.state.type]);
+        scene.remove(item.mesh);
+        droppedItems.splice(index, 1);
+        continue;
+      }
+
       item.mesh.position.set(item.state.x, item.state.y, item.state.z);
       item.mesh.rotation.set(item.state.rotation * 0.7, item.state.rotation, 0);
     }
